@@ -22,7 +22,7 @@ type BranchPolicy struct {
 	Channel    string     `mapstructure:"channel"`
 	Prerelease bool       `mapstructure:"prerelease"`
 	IsDefault  bool       `mapstructure:"is_default"`
-	Range      string     `mapstructure:"range"`       // maintenance range e.g. "1.x", "1.0.x"
+	Range      string     `mapstructure:"range"` // maintenance range e.g. "1.x", "1.0.x"
 	Type       BranchType `mapstructure:"branch_type"`
 }
 
@@ -38,7 +38,7 @@ func (bp BranchPolicy) IsPrerelease() bool {
 
 // MaintenanceRange parses the Range field into min/max version constraints.
 // Range format: "N.x" (major only) or "N.N.x" (major.minor).
-func (bp BranchPolicy) MaintenanceRange() (min Version, max Version, err error) {
+func (bp BranchPolicy) MaintenanceRange() (minVer, maxVer Version, err error) {
 	r := bp.Range
 	if r == "" {
 		// Try to infer from branch name (e.g. "1.x", "1.0.x").
@@ -48,15 +48,15 @@ func (bp BranchPolicy) MaintenanceRange() (min Version, max Version, err error) 
 	return parseMaintenanceRange(r)
 }
 
-func parseMaintenanceRange(r string) (min, max Version, err error) {
+func parseMaintenanceRange(r string) (minVer, maxVer Version, err error) {
 	parts := strings.Split(r, ".")
 	if len(parts) < 2 || parts[len(parts)-1] != "x" {
-		return min, max, fmt.Errorf("invalid maintenance range %q: expected N.x or N.N.x", r)
+		return minVer, maxVer, fmt.Errorf("invalid maintenance range %q: expected N.x or N.N.x", r)
 	}
 
 	major, err := strconv.Atoi(parts[0])
 	if err != nil {
-		return min, max, fmt.Errorf("invalid major in range %q: %w", r, err)
+		return minVer, maxVer, fmt.Errorf("invalid major in range %q: %w", r, err)
 	}
 
 	if len(parts) == 2 {
@@ -67,22 +67,22 @@ func parseMaintenanceRange(r string) (min, max Version, err error) {
 	if len(parts) == 3 {
 		minor, err := strconv.Atoi(parts[1])
 		if err != nil {
-			return min, max, fmt.Errorf("invalid minor in range %q: %w", r, err)
+			return minVer, maxVer, fmt.Errorf("invalid minor in range %q: %w", r, err)
 		}
 		// "N.N.x" — allows any patch within this major.minor.
 		return NewVersion(major, minor, 0), NewVersion(major, minor+1, 0), nil
 	}
 
-	return min, max, fmt.Errorf("invalid maintenance range %q", r)
+	return minVer, maxVer, fmt.Errorf("invalid maintenance range %q", r)
 }
 
 // VersionInRange checks if a version falls within the maintenance branch range.
-// min <= version < max.
-func VersionInRange(version, min, max Version) bool {
-	if version.Equal(min) {
+// minVer <= version < maxVer.
+func VersionInRange(version, minVer, maxVer Version) bool {
+	if version.Equal(minVer) {
 		return true
 	}
-	return (version.GreaterThan(min) || version.Equal(min)) && max.GreaterThan(version)
+	return (version.GreaterThan(minVer) || version.Equal(minVer)) && maxVer.GreaterThan(version)
 }
 
 // ValidateMaintenanceVersion checks that a proposed version is valid for the maintenance range.
@@ -91,15 +91,15 @@ func ValidateMaintenanceVersion(proposed Version, policy BranchPolicy) error {
 		return nil
 	}
 
-	min, max, err := policy.MaintenanceRange()
+	minVer, maxVer, err := policy.MaintenanceRange()
 	if err != nil {
 		return err
 	}
 
-	if !VersionInRange(proposed, min, max) {
+	if !VersionInRange(proposed, minVer, maxVer) {
 		return fmt.Errorf(
 			"version %s is outside maintenance range [%s, %s) for branch %q",
-			proposed, min, max, policy.Name,
+			proposed, minVer, maxVer, policy.Name,
 		)
 	}
 	return nil

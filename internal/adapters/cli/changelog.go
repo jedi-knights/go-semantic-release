@@ -50,10 +50,11 @@ func runChangelog(cmd *cobra.Command, _ []string) error {
 	}
 
 	gen := container.ChangelogGenerator()
-	for _, pp := range plan.ReleasableProjects() {
-		notes, err := gen.Generate(pp.NextVersion, pp.Project.Name, pp.Commits, cfg.ChangelogSections)
+	releasable := plan.ReleasableProjects()
+	for i := range releasable {
+		notes, err := gen.Generate(releasable[i].NextVersion, releasable[i].Project.Name, releasable[i].Commits, cfg.ChangelogSections)
 		if err != nil {
-			return fmt.Errorf("generating changelog for %s: %w", pp.Project.Name, err)
+			return fmt.Errorf("generating changelog for %s: %w", releasable[i].Project.Name, err)
 		}
 		fmt.Println(notes)
 		fmt.Println()

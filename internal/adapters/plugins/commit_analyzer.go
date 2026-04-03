@@ -22,8 +22,8 @@ func (p *CommitAnalyzerPlugin) Name() string { return "commit-analyzer" }
 
 func (p *CommitAnalyzerPlugin) AnalyzeCommits(_ context.Context, rc *domain.ReleaseContext) (domain.ReleaseType, error) {
 	highest := domain.ReleaseNone
-	for _, commit := range rc.Commits {
-		rt := commit.ReleaseType(p.typeMapping)
+	for i := range rc.Commits {
+		rt := rc.Commits[i].ReleaseType(p.typeMapping)
 		highest = highest.Higher(rt)
 	}
 	return highest, nil

@@ -49,12 +49,12 @@ func runVersion(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	for _, pp := range plan.Projects {
-		name := displayProjectName(pp.Project)
-		if pp.ShouldRelease {
-			fmt.Printf("%s: %s → %s\n", name, pp.CurrentVersion, pp.NextVersion)
+	for i := range plan.Projects {
+		name := displayProjectName(plan.Projects[i].Project)
+		if plan.Projects[i].ShouldRelease {
+			fmt.Printf("%s: %s → %s\n", name, plan.Projects[i].CurrentVersion, plan.Projects[i].NextVersion)
 		} else {
-			fmt.Printf("%s: %s (no change)\n", name, pp.CurrentVersion)
+			fmt.Printf("%s: %s (no change)\n", name, plan.Projects[i].CurrentVersion)
 		}
 	}
 	return nil

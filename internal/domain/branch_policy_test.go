@@ -95,18 +95,18 @@ func TestMaintenanceRange(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			min, max, err := tt.policy.MaintenanceRange()
+			minVer, maxVer, err := tt.policy.MaintenanceRange()
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("error = %v, wantErr = %v", err, tt.wantErr)
 			}
 			if tt.wantErr {
 				return
 			}
-			if !min.Equal(tt.wantMin) {
-				t.Errorf("min = %v, want %v", min, tt.wantMin)
+			if !minVer.Equal(tt.wantMin) {
+				t.Errorf("min = %v, want %v", minVer, tt.wantMin)
 			}
-			if !max.Equal(tt.wantMax) {
-				t.Errorf("max = %v, want %v", max, tt.wantMax)
+			if !maxVer.Equal(tt.wantMax) {
+				t.Errorf("max = %v, want %v", maxVer, tt.wantMax)
 			}
 		})
 	}

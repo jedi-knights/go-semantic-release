@@ -7,10 +7,10 @@ import (
 
 // Tag represents a git tag associated with a release version.
 type Tag struct {
-	Name       string
-	Version    Version
-	Project    string // empty for repo-level tags
-	Hash       string
+	Name        string
+	Version     Version
+	Project     string // empty for repo-level tags
+	Hash        string
 	IsAnnotated bool
 }
 
@@ -33,7 +33,7 @@ func DefaultProjectTagFormat() TagFormat {
 
 // ParseProjectFromTag extracts the project name and version from a tag string
 // using the given prefix. Returns empty project for repo-level tags.
-func ParseProjectFromTag(tagName string, prefix string) (project string, version Version, err error) {
+func ParseProjectFromTag(tagName, prefix string) (project string, version Version, err error) {
 	if prefix != "" {
 		if !strings.HasPrefix(tagName, prefix) {
 			return "", Version{}, fmt.Errorf("tag %q does not match prefix %q", tagName, prefix)

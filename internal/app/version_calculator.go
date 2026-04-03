@@ -56,14 +56,14 @@ func (s *VersionCalculatorService) Calculate(
 // constrainMaintenanceBump limits the bump type based on the maintenance range.
 // A "N.N.x" range only allows patch bumps; "N.x" allows patch and minor.
 func constrainMaintenanceBump(bump domain.ReleaseType, policy *domain.BranchPolicy) domain.ReleaseType {
-	_, max, err := policy.MaintenanceRange()
+	_, maxVer, err := policy.MaintenanceRange()
 	if err != nil {
 		return bump
 	}
 
 	// If max differs only in minor (N.N+1.0), only patch is allowed.
 	// If max differs in major (N+1.0.0), patch and minor are allowed.
-	if max.Minor > 0 && max.Patch == 0 && max.Major == max.Major {
+	if maxVer.Minor > 0 && maxVer.Patch == 0 {
 		// Range like "1.2.x" → max is "1.3.0" → only patch allowed.
 		if bump > domain.ReleasePatch {
 			return domain.ReleaseNone
@@ -80,8 +80,8 @@ func constrainMaintenanceBump(bump domain.ReleaseType, policy *domain.BranchPoli
 
 func aggregateBump(commits []domain.Commit, typeMapping map[string]domain.ReleaseType) domain.ReleaseType {
 	highest := domain.ReleaseNone
-	for _, c := range commits {
-		rt := c.ReleaseType(typeMapping)
+	for i := range commits {
+		rt := commits[i].ReleaseType(typeMapping)
 		highest = highest.Higher(rt)
 	}
 	return highest

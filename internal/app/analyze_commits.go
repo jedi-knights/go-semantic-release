@@ -30,28 +30,28 @@ func (a *CommitAnalyzer) Analyze(ctx context.Context, sinceHash string) ([]domai
 	a.logger.Debug("found raw commits", "count", len(rawCommits))
 
 	parsed := make([]domain.Commit, 0, len(rawCommits))
-	for _, raw := range rawCommits {
-		fullMessage := raw.Message
-		if raw.Body != "" {
-			fullMessage = raw.Message + "\n\n" + raw.Body
+	for i := range rawCommits {
+		fullMessage := rawCommits[i].Message
+		if rawCommits[i].Body != "" {
+			fullMessage = rawCommits[i].Message + "\n\n" + rawCommits[i].Body
 		}
 
 		commit, err := a.parser.Parse(fullMessage)
 		if err != nil {
-			a.logger.Warn("skipping unparseable commit", "hash", raw.Hash, "error", err)
+			a.logger.Warn("skipping unparseable commit", "hash", rawCommits[i].Hash, "error", err)
 			continue
 		}
 
 		// Preserve git metadata from raw commit.
-		commit.Hash = raw.Hash
-		commit.Author = raw.Author
-		commit.AuthorEmail = raw.AuthorEmail
-		commit.Date = raw.Date
+		commit.Hash = rawCommits[i].Hash
+		commit.Author = rawCommits[i].Author
+		commit.AuthorEmail = rawCommits[i].AuthorEmail
+		commit.Date = rawCommits[i].Date
 
 		// Populate changed files.
-		files, err := a.git.FilesChangedInCommit(ctx, raw.Hash)
+		files, err := a.git.FilesChangedInCommit(ctx, rawCommits[i].Hash)
 		if err != nil {
-			a.logger.Warn("failed to get changed files", "hash", raw.Hash, "error", err)
+			a.logger.Warn("failed to get changed files", "hash", rawCommits[i].Hash, "error", err)
 		}
 		commit.FilesChanged = files
 

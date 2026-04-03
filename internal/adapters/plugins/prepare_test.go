@@ -21,7 +21,7 @@ func TestPreparePlugin_UpdateVersionFile(t *testing.T) {
 	mockFS.EXPECT().WriteFile(
 		"/repo/VERSION",
 		[]byte("2.0.0\n"),
-		fs.FileMode(0644),
+		fs.FileMode(0o644),
 	).Return(nil)
 
 	plugin := plugins.NewPreparePlugin(mockFS, mockLogger, plugins.PrepareConfig{
@@ -55,7 +55,7 @@ func TestPreparePlugin_UpdateChangelog(t *testing.T) {
 	mockFS.EXPECT().WriteFile(
 		"/repo/CHANGELOG.md",
 		gomock.Any(), // We'll verify content structure.
-		fs.FileMode(0644),
+		fs.FileMode(0o644),
 	).DoAndReturn(func(_ string, data []byte, _ fs.FileMode) error {
 		content := string(data)
 		if content[:11] != "# Changelog" {
@@ -93,7 +93,7 @@ func TestPreparePlugin_NewChangelog(t *testing.T) {
 	mockFS.EXPECT().WriteFile(
 		"/repo/CHANGELOG.md",
 		gomock.Any(),
-		fs.FileMode(0644),
+		fs.FileMode(0o644),
 	).DoAndReturn(func(_ string, data []byte, _ fs.FileMode) error {
 		content := string(data)
 		if content[:11] != "# Changelog" {

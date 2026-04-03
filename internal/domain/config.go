@@ -3,41 +3,41 @@ package domain
 // Config holds all configuration for the release process.
 type Config struct {
 	// Core settings.
-	ReleaseMode        ReleaseMode              `mapstructure:"release_mode"`
-	TagFormat          string                   `mapstructure:"tag_format"`
-	ProjectTagFormat   string                   `mapstructure:"project_tag_format"`
-	DryRun             bool                     `mapstructure:"dry_run"`
-	CI                 bool                     `mapstructure:"ci"`
-	Debug              bool                     `mapstructure:"debug"`
-	RepositoryURL      string                   `mapstructure:"repository_url"`
+	ReleaseMode      ReleaseMode `mapstructure:"release_mode"`
+	TagFormat        string      `mapstructure:"tag_format"`
+	ProjectTagFormat string      `mapstructure:"project_tag_format"`
+	DryRun           bool        `mapstructure:"dry_run"`
+	CI               bool        `mapstructure:"ci"`
+	Debug            bool        `mapstructure:"debug"`
+	RepositoryURL    string      `mapstructure:"repository_url"`
 
 	// Branch and version policies.
-	Branches           []BranchPolicy           `mapstructure:"branches"`
-	CommitTypes        map[string]ReleaseType   `mapstructure:"commit_types"`
+	Branches    []BranchPolicy         `mapstructure:"branches"`
+	CommitTypes map[string]ReleaseType `mapstructure:"commit_types"`
 
 	// Project/monorepo settings.
-	Projects              []ProjectConfig       `mapstructure:"projects"`
-	DiscoverModules       bool                  `mapstructure:"discover_modules"`
-	IncludePaths          []string              `mapstructure:"include_paths"`
-	ExcludePaths          []string              `mapstructure:"exclude_paths"`
-	DependencyPropagation bool                  `mapstructure:"dependency_propagation"`
+	Projects              []ProjectConfig `mapstructure:"projects"`
+	DiscoverModules       bool            `mapstructure:"discover_modules"`
+	IncludePaths          []string        `mapstructure:"include_paths"`
+	ExcludePaths          []string        `mapstructure:"exclude_paths"`
+	DependencyPropagation bool            `mapstructure:"dependency_propagation"`
 
 	// Changelog settings.
-	ChangelogSections  []ChangelogSectionConfig `mapstructure:"changelog_sections"`
-	ChangelogTemplate  string                   `mapstructure:"changelog_template"`
+	ChangelogSections []ChangelogSectionConfig `mapstructure:"changelog_sections"`
+	ChangelogTemplate string                   `mapstructure:"changelog_template"`
 
 	// Prepare step settings.
-	Prepare            PrepareConfig            `mapstructure:"prepare"`
+	Prepare PrepareConfig `mapstructure:"prepare"`
 
 	// Git identity for automated commits.
-	GitAuthor          GitIdentity              `mapstructure:"git_author"`
-	GitCommitter       GitIdentity              `mapstructure:"git_committer"`
+	GitAuthor    GitIdentity `mapstructure:"git_author"`
+	GitCommitter GitIdentity `mapstructure:"git_committer"`
 
 	// GitHub integration.
-	GitHub             GitHubConfig             `mapstructure:"github"`
+	GitHub GitHubConfig `mapstructure:"github"`
 
 	// Extends allows inheriting from shared configurations.
-	Extends            []string                 `mapstructure:"extends"`
+	Extends []string `mapstructure:"extends"`
 }
 
 // PrepareConfig holds settings for the prepare lifecycle step.

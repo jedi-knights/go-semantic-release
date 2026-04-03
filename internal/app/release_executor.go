@@ -41,11 +41,12 @@ func NewReleaseExecutor(
 func (e *ReleaseExecutor) Execute(ctx context.Context, plan *domain.ReleasePlan) (*domain.ReleaseResult, error) {
 	result := &domain.ReleaseResult{DryRun: plan.DryRun}
 
-	for _, pp := range plan.ReleasableProjects() {
-		pr, err := e.executeProject(ctx, pp, plan)
+	releasable := plan.ReleasableProjects()
+	for i := range releasable {
+		pr, err := e.executeProject(ctx, releasable[i], plan)
 		if err != nil {
 			pr.Error = err
-			e.logger.Error("release failed", "project", pp.Project.Name, "error", err)
+			e.logger.Error("release failed", "project", releasable[i].Project.Name, "error", err)
 		}
 		result.Projects = append(result.Projects, pr)
 	}

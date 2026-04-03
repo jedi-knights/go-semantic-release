@@ -66,7 +66,7 @@ func (p *PreparePlugin) updateVersionFile(version domain.Version, repoRoot strin
 	path := filepath.Join(repoRoot, p.versionFile)
 	content := version.String() + "\n"
 
-	if err := p.fs.WriteFile(path, []byte(content), fs.FileMode(0644)); err != nil {
+	if err := p.fs.WriteFile(path, []byte(content), fs.FileMode(0o644)); err != nil {
 		return fmt.Errorf("writing version file %s: %w", path, err)
 	}
 	p.logger.Info("updated version file", "path", path, "version", version)
@@ -93,7 +93,7 @@ func (p *PreparePlugin) updateChangelog(rc *domain.ReleaseContext) error {
 	// Prepend new entry after the title line if it exists, otherwise at the top.
 	updated := prependChangelog(existing, newEntry)
 
-	if err := p.fs.WriteFile(path, []byte(updated), fs.FileMode(0644)); err != nil {
+	if err := p.fs.WriteFile(path, []byte(updated), fs.FileMode(0o644)); err != nil {
 		return fmt.Errorf("writing changelog %s: %w", path, err)
 	}
 	p.logger.Info("updated changelog", "path", path)

@@ -36,8 +36,8 @@ func (p *Pipeline) Execute(ctx context.Context, rc *domain.ReleaseContext) error
 		return nil
 	}
 
-	if err := p.runVerifyRelease(ctx, rc); err != nil {
-		return p.handleFailure(ctx, rc, err)
+	if verifyErr := p.runVerifyRelease(ctx, rc); verifyErr != nil {
+		return p.handleFailure(ctx, rc, verifyErr)
 	}
 
 	notes, err := p.runGenerateNotes(ctx, rc)

@@ -2,9 +2,9 @@ package di
 
 import (
 	"github.com/jedi-knights/go-semantic-release/internal/adapters/changelog"
+	adapterfs "github.com/jedi-knights/go-semantic-release/internal/adapters/fs"
 	adaptergit "github.com/jedi-knights/go-semantic-release/internal/adapters/git"
 	adaptergithub "github.com/jedi-knights/go-semantic-release/internal/adapters/github"
-	adapterfs "github.com/jedi-knights/go-semantic-release/internal/adapters/fs"
 	"github.com/jedi-knights/go-semantic-release/internal/adapters/plugins"
 	"github.com/jedi-knights/go-semantic-release/internal/app"
 	"github.com/jedi-knights/go-semantic-release/internal/domain"
@@ -137,29 +137,27 @@ func (c *Container) buildDiscoverer() ports.ProjectDiscoverer {
 
 // Plugins builds the ordered list of lifecycle plugins based on config.
 func (c *Container) Plugins() []ports.Plugin {
-	var ps []ports.Plugin
-
-	// Git plugin: verifyConditions + publish (tag + push).
-	ps = append(ps, plugins.NewGitPlugin(
-		c.GitRepository(),
-		c.TagService(),
-		c.FileSystem(),
-		c.logger,
-		c.config.GitAuthor,
-		nil,
-	))
-
-	// Commit analyzer plugin: analyzeCommits.
-	ps = append(ps, plugins.NewCommitAnalyzerPlugin(
-		c.CommitParser(),
-		c.config.CommitTypes,
-	))
-
-	// Release notes plugin: generateNotes.
-	ps = append(ps, plugins.NewReleaseNotesPlugin(
-		c.ChangelogGenerator(),
-		c.config.ChangelogSections,
-	))
+	ps := []ports.Plugin{
+		// Git plugin: verifyConditions + publish (tag + push).
+		plugins.NewGitPlugin(
+			c.GitRepository(),
+			c.TagService(),
+			c.FileSystem(),
+			c.logger,
+			c.config.GitAuthor,
+			nil,
+		),
+		// Commit analyzer plugin: analyzeCommits.
+		plugins.NewCommitAnalyzerPlugin(
+			c.CommitParser(),
+			c.config.CommitTypes,
+		),
+		// Release notes plugin: generateNotes.
+		plugins.NewReleaseNotesPlugin(
+			c.ChangelogGenerator(),
+			c.config.ChangelogSections,
+		),
+	}
 
 	// Prepare plugin: update CHANGELOG.md, VERSION files.
 	if c.config.Prepare.ChangelogFile != "" || c.config.Prepare.VersionFile != "" {

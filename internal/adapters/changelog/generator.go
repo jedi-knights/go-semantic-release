@@ -84,7 +84,7 @@ func (g *TemplateGenerator) buildTemplateData(
 	breakingCommits := filterBreakingCommits(commits)
 	commitsByType := groupCommitsByType(commits)
 
-	var secs []sectionData
+	secs := make([]sectionData, 0, len(sections))
 	for _, sec := range sections {
 		if sec.Hidden {
 			continue
@@ -117,9 +117,9 @@ func (g *TemplateGenerator) buildTemplateData(
 
 func filterBreakingCommits(commits []domain.Commit) []domain.Commit {
 	var result []domain.Commit
-	for _, c := range commits {
-		if c.IsBreakingChange {
-			result = append(result, c)
+	for i := range commits {
+		if commits[i].IsBreakingChange {
+			result = append(result, commits[i])
 		}
 	}
 	return result
@@ -127,9 +127,9 @@ func filterBreakingCommits(commits []domain.Commit) []domain.Commit {
 
 func groupCommitsByType(commits []domain.Commit) map[string][]domain.Commit {
 	groups := make(map[string][]domain.Commit)
-	for _, c := range commits {
-		if c.Type != "" {
-			groups[c.Type] = append(groups[c.Type], c)
+	for i := range commits {
+		if commits[i].Type != "" {
+			groups[commits[i].Type] = append(groups[commits[i].Type], commits[i])
 		}
 	}
 	return groups
@@ -137,19 +137,19 @@ func groupCommitsByType(commits []domain.Commit) map[string][]domain.Commit {
 
 func toCommitData(commits []domain.Commit) []commitData {
 	result := make([]commitData, 0, len(commits))
-	for _, c := range commits {
-		short := c.Hash
+	for i := range commits {
+		short := commits[i].Hash
 		if len(short) > 7 {
 			short = short[:7]
 		}
 		result = append(result, commitData{
-			Hash:        c.Hash,
+			Hash:        commits[i].Hash,
 			ShortHash:   short,
-			Type:        c.Type,
-			Scope:       c.Scope,
-			Description: c.Description,
-			Author:      c.Author,
-			Breaking:    c.IsBreakingChange,
+			Type:        commits[i].Type,
+			Scope:       commits[i].Scope,
+			Description: commits[i].Description,
+			Author:      commits[i].Author,
+			Breaking:    commits[i].IsBreakingChange,
 		})
 	}
 	return result

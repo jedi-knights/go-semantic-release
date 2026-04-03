@@ -4,7 +4,7 @@ import "os"
 
 // CIEnvironment represents a detected CI/CD platform.
 type CIEnvironment struct {
-	Name    string
+	Name     string
 	Detected bool
 	Branch   string
 	Commit   string

@@ -21,8 +21,8 @@ type ProjectReleasePlan struct {
 
 // HasReleasableProjects returns true if at least one project needs a release.
 func (rp ReleasePlan) HasReleasableProjects() bool {
-	for _, p := range rp.Projects {
-		if p.ShouldRelease {
+	for i := range rp.Projects {
+		if rp.Projects[i].ShouldRelease {
 			return true
 		}
 	}
@@ -32,9 +32,9 @@ func (rp ReleasePlan) HasReleasableProjects() bool {
 // ReleasableProjects returns only the projects that need a release.
 func (rp ReleasePlan) ReleasableProjects() []ProjectReleasePlan {
 	var result []ProjectReleasePlan
-	for _, p := range rp.Projects {
-		if p.ShouldRelease {
-			result = append(result, p)
+	for i := range rp.Projects {
+		if rp.Projects[i].ShouldRelease {
+			result = append(result, rp.Projects[i])
 		}
 	}
 	return result

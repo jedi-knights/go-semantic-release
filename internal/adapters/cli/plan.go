@@ -68,18 +68,18 @@ func printPlan(plan *domain.ReleasePlan) error {
 		return nil
 	}
 
-	for _, pp := range plan.Projects {
+	for i := range plan.Projects {
 		status := "skip"
-		if pp.ShouldRelease {
+		if plan.Projects[i].ShouldRelease {
 			status = "release"
 		}
-		fmt.Printf("  %s [%s]\n", displayProjectName(pp.Project), status)
-		fmt.Printf("    Current: %s\n", pp.CurrentVersion)
-		if pp.ShouldRelease {
-			fmt.Printf("    Next:    %s (%s)\n", pp.NextVersion, pp.ReleaseType)
+		fmt.Printf("  %s [%s]\n", displayProjectName(plan.Projects[i].Project), status)
+		fmt.Printf("    Current: %s\n", plan.Projects[i].CurrentVersion)
+		if plan.Projects[i].ShouldRelease {
+			fmt.Printf("    Next:    %s (%s)\n", plan.Projects[i].NextVersion, plan.Projects[i].ReleaseType)
 		}
-		fmt.Printf("    Commits: %d\n", len(pp.Commits))
-		fmt.Printf("    Reason:  %s\n\n", pp.Reason)
+		fmt.Printf("    Commits: %d\n", len(plan.Projects[i].Commits))
+		fmt.Printf("    Reason:  %s\n\n", plan.Projects[i].Reason)
 	}
 	return nil
 }

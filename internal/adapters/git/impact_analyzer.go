@@ -19,10 +19,10 @@ func NewPathBasedImpactAnalyzer(propagateDeps bool) *PathBasedImpactAnalyzer {
 func (a *PathBasedImpactAnalyzer) Analyze(projects []domain.Project, commits []domain.Commit) map[string][]domain.Commit {
 	result := make(map[string][]domain.Commit)
 
-	for _, commit := range commits {
-		affected := a.findAffectedProjects(projects, commit.FilesChanged)
+	for i := range commits {
+		affected := a.findAffectedProjects(projects, commits[i].FilesChanged)
 		for _, projName := range affected {
-			result[projName] = append(result[projName], commit)
+			result[projName] = append(result[projName], commits[i])
 		}
 	}
 

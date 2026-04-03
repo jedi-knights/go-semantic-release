@@ -81,7 +81,7 @@ func (r *Repository) CommitsSince(ctx context.Context, sinceHash string) ([]doma
 
 func parseCommitLog(output string) ([]domain.Commit, error) {
 	entries := strings.Split(output, "\x00")
-	var commits []domain.Commit
+	commits := make([]domain.Commit, 0, len(entries))
 
 	for _, entry := range entries {
 		entry = strings.TrimSpace(entry)
@@ -140,7 +140,7 @@ func (r *Repository) FilesChangedInCommit(ctx context.Context, hash string) ([]s
 	return strings.Split(output, "\n"), nil
 }
 
-func (r *Repository) CreateTag(ctx context.Context, name string, hash string, message string) error {
+func (r *Repository) CreateTag(ctx context.Context, name, hash, message string) error {
 	if message != "" {
 		_, err := r.run(ctx, "tag", "-a", name, hash, "-m", message)
 		return err

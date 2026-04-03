@@ -71,19 +71,19 @@ func printReleaseResult(result *domain.ReleaseResult) error {
 		return json.NewEncoder(os.Stdout).Encode(result)
 	}
 
-	for _, pr := range result.Projects {
-		if pr.Skipped {
+	for i := range result.Projects {
+		if result.Projects[i].Skipped {
 			fmt.Printf("[dry-run] %s: %s → %s (tag: %s)\n",
-				projectName(pr), pr.Version.String(), pr.Version.String(), pr.TagName)
+				projectName(result.Projects[i]), result.Projects[i].Version.String(), result.Projects[i].Version.String(), result.Projects[i].TagName)
 			continue
 		}
-		if pr.Error != nil {
-			fmt.Fprintf(os.Stderr, "ERROR %s: %v\n", projectName(pr), pr.Error)
+		if result.Projects[i].Error != nil {
+			fmt.Fprintf(os.Stderr, "ERROR %s: %v\n", projectName(result.Projects[i]), result.Projects[i].Error)
 			continue
 		}
-		fmt.Printf("Released %s %s (tag: %s)\n", projectName(pr), pr.Version, pr.TagName)
-		if pr.PublishURL != "" {
-			fmt.Printf("  → %s\n", pr.PublishURL)
+		fmt.Printf("Released %s %s (tag: %s)\n", projectName(result.Projects[i]), result.Projects[i].Version, result.Projects[i].TagName)
+		if result.Projects[i].PublishURL != "" {
+			fmt.Printf("  → %s\n", result.Projects[i].PublishURL)
 		}
 	}
 	return nil

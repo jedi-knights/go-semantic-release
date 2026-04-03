@@ -10,12 +10,12 @@ func TestConventionalCommitParser_Parse(t *testing.T) {
 	parser := git.NewConventionalCommitParser()
 
 	tests := []struct {
-		name            string
-		message         string
-		wantType        string
-		wantScope       string
-		wantDescription string
-		wantBreaking    bool
+		name             string
+		message          string
+		wantType         string
+		wantScope        string
+		wantDescription  string
+		wantBreaking     bool
 		wantBreakingNote string
 	}{
 		{

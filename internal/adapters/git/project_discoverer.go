@@ -99,13 +99,12 @@ func NewModuleDiscoverer(fs ports.FileSystem) *ModuleDiscoverer {
 }
 
 func (d *ModuleDiscoverer) Discover(ctx context.Context, rootPath string) ([]domain.Project, error) {
-	var projects []domain.Project
-
-	matches, err := d.fs.Glob(filepath.Join(rootPath, "**/go.mod"))
+	matches, err := d.fs.Glob(rootPath + "/**/go.mod")
 	if err != nil {
 		return nil, fmt.Errorf("scanning for go.mod files: %w", err)
 	}
 
+	projects := make([]domain.Project, 0, len(matches))
 	for _, match := range matches {
 		rel, err := filepath.Rel(rootPath, filepath.Dir(match))
 		if err != nil {

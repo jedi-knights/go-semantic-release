@@ -164,8 +164,3 @@ func parseBranchFlags(branchNames []string) []domain.BranchPolicy {
 	}
 	return policies
 }
-
-func getConfig() (domain.Config, error) {
-	provider := adapterconfig.NewViperProvider()
-	return provider.Load(cfgFile)
-}

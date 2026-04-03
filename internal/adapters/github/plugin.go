@@ -89,7 +89,7 @@ func (p *Plugin) VerifyConditions(ctx context.Context, rc *domain.ReleaseContext
 
 	// Verify token is valid with a lightweight API call.
 	url := fmt.Sprintf("%s/repos/%s/%s", p.config.APIURL, owner, repo)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return fmt.Errorf("creating request: %w", err)
 	}
@@ -209,9 +209,9 @@ func (p *Plugin) Success(ctx context.Context, rc *domain.ReleaseContext) error {
 
 	// Find the publish URL for this project.
 	releaseURL := ""
-	for _, pr := range rc.Result.Projects {
-		if pr.Project.Name == rc.CurrentProject.Project.Name {
-			releaseURL = pr.PublishURL
+	for i := range rc.Result.Projects {
+		if rc.Result.Projects[i].Project.Name == rc.CurrentProject.Project.Name {
+			releaseURL = rc.Result.Projects[i].PublishURL
 			break
 		}
 	}
@@ -224,10 +224,10 @@ func (p *Plugin) Success(ctx context.Context, rc *domain.ReleaseContext) error {
 	).Replace(p.config.SuccessComment)
 
 	// Comment on commits' associated PRs.
-	for _, commit := range rc.CurrentProject.Commits {
-		prs, err := p.getPRsForCommit(ctx, commit.Hash)
+	for i := range rc.CurrentProject.Commits {
+		prs, err := p.getPRsForCommit(ctx, rc.CurrentProject.Commits[i].Hash)
 		if err != nil {
-			p.logger.Debug("failed to get PRs for commit", "hash", commit.Hash, "error", err)
+			p.logger.Debug("failed to get PRs for commit", "hash", rc.CurrentProject.Commits[i].Hash, "error", err)
 			continue
 		}
 		for _, pr := range prs {
@@ -252,7 +252,7 @@ func (p *Plugin) Fail(ctx context.Context, rc *domain.ReleaseContext) error {
 		"{{.Error}}", rc.Error.Error(),
 	).Replace(p.config.FailComment)
 
-	title := fmt.Sprintf("The automated release is failing")
+	title := "The automated release is failing"
 
 	// Check for existing failure issue.
 	existing, err := p.findFailureIssue(ctx, title)
@@ -279,9 +279,9 @@ type ghCreateReleaseRequest struct {
 }
 
 type ghRelease struct {
-	ID      int    `json:"id"`
-	HTMLURL string `json:"html_url"`
-	TagName string `json:"tag_name"`
+	ID        int    `json:"id"`
+	HTMLURL   string `json:"html_url"`
+	TagName   string `json:"tag_name"`
 	UploadURL string `json:"upload_url"`
 }
 
@@ -334,7 +334,7 @@ func (p *Plugin) createGHRelease(ctx context.Context, reqBody ghCreateReleaseReq
 
 func (p *Plugin) getReleaseByTag(ctx context.Context, tag string) (*ghRelease, error) {
 	url := fmt.Sprintf("%s/repos/%s/%s/releases/tags/%s", p.config.APIURL, p.config.Owner, p.config.Repo, tag)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -421,7 +421,7 @@ func (p *Plugin) uploadAsset(ctx context.Context, releaseID int, filePath string
 
 func (p *Plugin) getPRsForCommit(ctx context.Context, sha string) ([]ghPR, error) {
 	url := fmt.Sprintf("%s/repos/%s/%s/commits/%s/pulls", p.config.APIURL, p.config.Owner, p.config.Repo, sha)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -491,7 +491,7 @@ func (p *Plugin) addLabelsToIssue(ctx context.Context, number int, labels []stri
 func (p *Plugin) findFailureIssue(ctx context.Context, title string) (*ghIssue, error) {
 	url := fmt.Sprintf("%s/repos/%s/%s/issues?state=open&labels=%s&creator=app",
 		p.config.APIURL, p.config.Owner, p.config.Repo, strings.Join(p.config.FailLabels, ","))
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return nil, err
 	}

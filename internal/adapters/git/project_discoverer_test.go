@@ -13,12 +13,12 @@ import (
 
 func TestWorkspaceDiscoverer_Discover(t *testing.T) {
 	tests := []struct {
-		name         string
-		goWorkExists bool
+		name          string
+		goWorkExists  bool
 		goWorkContent string
 		goModContents map[string]string
-		wantCount    int
-		wantNames    []string
+		wantCount     int
+		wantNames     []string
 	}{
 		{
 			name:         "no go.work file",
@@ -184,4 +184,3 @@ func TestCompositeDiscoverer_FirstNonEmpty(t *testing.T) {
 		t.Errorf("expected 'found' project, got %v", projects)
 	}
 }
-
