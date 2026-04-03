@@ -2,7 +2,7 @@
 
 ## Hexagonal Architecture
 
-gosemrel is built on the Hexagonal Architecture (Ports and Adapters) pattern. This decision drives the entire codebase structure.
+semantic-release is built on the Hexagonal Architecture (Ports and Adapters) pattern. This decision drives the entire codebase structure.
 
 ### Layers
 

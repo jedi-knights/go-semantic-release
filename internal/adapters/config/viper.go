@@ -22,14 +22,14 @@ func (p *ViperProvider) Load(path string) (domain.Config, error) {
 
 	v := viper.New()
 	v.SetConfigType("yaml")
-	v.SetEnvPrefix("GOSEMREL")
+	v.SetEnvPrefix("SEMANTIC_RELEASE")
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 
 	if path != "" {
 		v.SetConfigFile(path)
 	} else {
-		v.SetConfigName(".gosemrel")
+		v.SetConfigName(".semantic-release")
 		v.AddConfigPath(".")
 	}
 

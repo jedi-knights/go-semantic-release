@@ -1,9 +1,9 @@
 version: "3"
 
 vars:
-  BINARY: gosemrel
+  BINARY: semantic-release
   BUILD_DIR: bin
-  MAIN: ./cmd/gosemrel
+  MAIN: ./cmd/semantic-release
 
 tasks:
   default:

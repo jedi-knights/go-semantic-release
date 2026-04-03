@@ -58,10 +58,10 @@ jobs:
           cache: true
 
       - name: Build
-        run: go build -o bin/gosemrel ./cmd/gosemrel
+        run: go build -o bin/semantic-release ./cmd/semantic-release
 
       - name: Verify binary
-        run: ./bin/gosemrel --help
+        run: ./bin/semantic-release --help
 
   dry-run:
     name: Release Dry Run
@@ -79,7 +79,7 @@ jobs:
           cache: true
 
       - name: Build
-        run: go build -o bin/gosemrel ./cmd/gosemrel
+        run: go build -o bin/semantic-release ./cmd/semantic-release
 
       - name: Dry run release
-        run: ./bin/gosemrel plan
+        run: ./bin/semantic-release plan

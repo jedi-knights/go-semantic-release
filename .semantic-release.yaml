@@ -1,4 +1,4 @@
-# gosemrel configuration
+# semantic-release configuration
 # See README.md for full documentation
 
 release_mode: repo
@@ -41,4 +41,4 @@ branches:
 github:
   create_release: true
   # owner and repo are auto-detected from git remote
-  # token is read from GOSEMREL_GITHUB_TOKEN env var
+  # token is read from SEMANTIC_RELEASE_GITHUB_TOKEN env var

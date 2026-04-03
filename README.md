@@ -1,4 +1,4 @@
-# gosemrel
+# semantic-release
 
 A production-grade semantic release utility written in native Go. Analyzes conventional commits, determines the next semantic version, generates changelogs, creates tags, and publishes GitHub releases.
 
@@ -22,7 +22,7 @@ Supports monorepos with independent project versioning, including Go workspaces 
 ## Installation
 
 ```bash
-go install github.com/jedi-knights/go-semantic-release/cmd/gosemrel@latest
+go install github.com/jedi-knights/go-semantic-release/cmd/semantic-release@latest
 ```
 
 Or build from source:
@@ -30,56 +30,56 @@ Or build from source:
 ```bash
 git clone https://github.com/jedi-knights/go-semantic-release.git
 cd go-semantic-release
-go build -o bin/gosemrel ./cmd/gosemrel
+go build -o bin/semantic-release ./cmd/semantic-release
 ```
 
 ## Quick Start
 
 ```bash
 # Initialize config
-gosemrel config init
+semantic-release config init
 
 # See what would happen
-gosemrel plan
+semantic-release plan
 
 # Preview the next version
-gosemrel version
+semantic-release version
 
 # Generate changelog
-gosemrel changelog
+semantic-release changelog
 
 # Perform a release
-gosemrel release
+semantic-release release
 
 # Dry run
-gosemrel release --dry-run
+semantic-release release --dry-run
 ```
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `gosemrel release` | Analyze commits, tag, and publish a release |
-| `gosemrel release --project api` | Release a specific project in a monorepo |
-| `gosemrel plan` | Show the release plan without executing |
-| `gosemrel version` | Display current and next version |
-| `gosemrel changelog` | Generate release notes |
-| `gosemrel detect-projects` | List discovered projects |
-| `gosemrel verify` | Check release prerequisites |
-| `gosemrel config init` | Create a default config file |
+| `semantic-release release` | Analyze commits, tag, and publish a release |
+| `semantic-release release --project api` | Release a specific project in a monorepo |
+| `semantic-release plan` | Show the release plan without executing |
+| `semantic-release version` | Display current and next version |
+| `semantic-release changelog` | Generate release notes |
+| `semantic-release detect-projects` | List discovered projects |
+| `semantic-release verify` | Check release prerequisites |
+| `semantic-release config init` | Create a default config file |
 
 ### Global Flags
 
 | Flag | Description |
 |------|-------------|
-| `--config` | Path to config file (default: `.gosemrel.yaml`) |
+| `--config` | Path to config file (default: `.semantic-release.yaml`) |
 | `--dry-run` | Preview without mutations |
 | `--project` | Target a specific project |
 | `--json` | Output in JSON format |
 
 ## Configuration
 
-Configuration is loaded from `.gosemrel.yaml`, environment variables (prefix `GOSEMREL_`), and CLI flags.
+Configuration is loaded from `.semantic-release.yaml`, environment variables (prefix `SEMANTIC_RELEASE_`), and CLI flags.
 
 ### Repository-wide release (default)
 
@@ -145,15 +145,15 @@ github:
   create_release: true
   owner: jedi-knights
   repo: go-semantic-release
-  # token: set via GOSEMREL_GITHUB_TOKEN env var
+  # token: set via SEMANTIC_RELEASE_GITHUB_TOKEN env var
 ```
 
 ## Architecture
 
-gosemrel follows **Hexagonal Architecture** (Ports and Adapters) with clear separation:
+semantic-release follows **Hexagonal Architecture** (Ports and Adapters) with clear separation:
 
 ```
-cmd/gosemrel/          # CLI entry point
+cmd/semantic-release/  # CLI entry point
 internal/
   domain/              # Pure business logic, no dependencies
   ports/               # Interface definitions (ports)
@@ -187,7 +187,7 @@ internal/
 |------|-----------|------|
 | Go workspace (`go.work`) | Parses `use` directives | `project/vX.Y.Z` |
 | Nested `go.mod` | Recursive file scan | `project/vX.Y.Z` |
-| Config-defined | `.gosemrel.yaml` projects | Configurable prefix |
+| Config-defined | `.semantic-release.yaml` projects | Configurable prefix |
 | Single module | Root `go.mod` | `vX.Y.Z` |
 
 ## Development

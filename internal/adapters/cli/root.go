@@ -22,16 +22,16 @@ var (
 // NewRootCmd creates the root cobra command.
 func NewRootCmd() *cobra.Command {
 	root := &cobra.Command{
-		Use:   "gosemrel",
+		Use:   "semantic-release",
 		Short: "Semantic release utility for Go projects",
-		Long: `gosemrel is a native Go semantic release utility that analyzes
+		Long: `semantic-release is a native Go semantic release utility that analyzes
 conventional commits to determine the next version, generate changelogs,
 create tags, and publish releases. It supports monorepos with independent
 project versioning.`,
 		SilenceUsage: true,
 	}
 
-	root.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default: .gosemrel.yaml)")
+	root.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default: .semantic-release.yaml)")
 	root.PersistentFlags().BoolVar(&dryRun, "dry-run", false, "perform a dry run without mutations")
 	root.PersistentFlags().StringVar(&project, "project", "", "target a specific project in a monorepo")
 	root.PersistentFlags().BoolVar(&jsonOut, "json", false, "output in JSON format")

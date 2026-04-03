@@ -27,7 +27,7 @@ func newConfigInitCmd() *cobra.Command {
 }
 
 func runConfigInit(cmd *cobra.Command, _ []string) error {
-	path := ".gosemrel.yaml"
+	path := ".semantic-release.yaml"
 	if err := adapterconfig.WriteDefaultConfig(path); err != nil {
 		return fmt.Errorf("writing config: %w", err)
 	}

@@ -64,7 +64,7 @@ func (v *ConditionVerifier) checkGitHub(result *VerificationResult) {
 		missing = append(missing, "github.repo")
 	}
 	if v.config.GitHub.Token == "" {
-		missing = append(missing, "github.token (or GOSEMREL_GITHUB_TOKEN)")
+		missing = append(missing, "github.token (or SEMANTIC_RELEASE_GITHUB_TOKEN)")
 	}
 
 	if len(missing) > 0 {
