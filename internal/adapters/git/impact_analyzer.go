@@ -5,7 +5,11 @@ import (
 	"strings"
 
 	"github.com/jedi-knights/go-semantic-release/internal/domain"
+	"github.com/jedi-knights/go-semantic-release/internal/ports"
 )
+
+// Compile-time interface compliance check.
+var _ ports.ProjectImpactAnalyzer = (*PathBasedImpactAnalyzer)(nil)
 
 // PathBasedImpactAnalyzer maps changed files to projects based on path prefixes.
 type PathBasedImpactAnalyzer struct {

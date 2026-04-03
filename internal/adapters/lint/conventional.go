@@ -5,7 +5,11 @@ import (
 	"strings"
 
 	"github.com/jedi-knights/go-semantic-release/internal/domain"
+	"github.com/jedi-knights/go-semantic-release/internal/ports"
 )
+
+// Compile-time interface compliance check.
+var _ ports.CommitLinter = (*ConventionalLinter)(nil)
 
 // ConventionalLinter validates commits against conventional commit rules.
 type ConventionalLinter struct {

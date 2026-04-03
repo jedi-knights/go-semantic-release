@@ -1,5 +1,10 @@
 package prompt
 
+import "github.com/jedi-knights/go-semantic-release/internal/ports"
+
+// Compile-time interface compliance check.
+var _ ports.Prompter = (*NoopPrompter)(nil)
+
 // NoopPrompter always confirms without prompting (for CI or non-interactive mode).
 type NoopPrompter struct{}
 

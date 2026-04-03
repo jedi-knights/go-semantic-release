@@ -8,6 +8,13 @@ import (
 	"github.com/jedi-knights/go-semantic-release/internal/ports"
 )
 
+// Compile-time interface compliance checks.
+var (
+	_ ports.Plugin                 = (*GitPlugin)(nil)
+	_ ports.VerifyConditionsPlugin = (*GitPlugin)(nil)
+	_ ports.PublishPlugin          = (*GitPlugin)(nil)
+)
+
 // GitPlugin handles git operations: verifyConditions (git access), prepare (commit changes), publish (tag + push).
 type GitPlugin struct {
 	git        ports.GitRepository

@@ -16,7 +16,11 @@ import (
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 
 	"github.com/jedi-knights/go-semantic-release/internal/domain"
+	"github.com/jedi-knights/go-semantic-release/internal/ports"
 )
+
+// Compile-time interface compliance check.
+var _ ports.GitRepository = (*Repository)(nil)
 
 // Repository implements ports.GitRepository using go-git (pure Go, no CLI dependency).
 type Repository struct {

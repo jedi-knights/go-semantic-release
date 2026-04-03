@@ -20,6 +20,16 @@ const (
 	ProjectTypeRoot        ProjectType = "root"
 )
 
+// String returns the string representation of the release mode.
+func (m ReleaseMode) String() string {
+	return string(m)
+}
+
+// String returns the string representation of the project type.
+func (pt ProjectType) String() string {
+	return string(pt)
+}
+
 // Project represents a versioned unit within a repository.
 type Project struct {
 	Name         string

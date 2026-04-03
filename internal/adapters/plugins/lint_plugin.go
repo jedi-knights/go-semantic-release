@@ -9,6 +9,12 @@ import (
 	"github.com/jedi-knights/go-semantic-release/internal/ports"
 )
 
+// Compile-time interface compliance checks.
+var (
+	_ ports.Plugin              = (*LintPlugin)(nil)
+	_ ports.VerifyReleasePlugin = (*LintPlugin)(nil)
+)
+
 // LintPlugin implements VerifyReleasePlugin by linting commit messages.
 type LintPlugin struct {
 	linter ports.CommitLinter

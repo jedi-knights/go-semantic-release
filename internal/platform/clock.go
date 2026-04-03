@@ -1,6 +1,13 @@
 package platform
 
-import "time"
+import (
+	"time"
+
+	"github.com/jedi-knights/go-semantic-release/internal/ports"
+)
+
+// Compile-time interface compliance check.
+var _ ports.Clock = (*RealClock)(nil)
 
 // RealClock implements ports.Clock using the system clock.
 type RealClock struct{}

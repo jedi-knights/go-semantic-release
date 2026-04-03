@@ -7,7 +7,11 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/jedi-knights/go-semantic-release/internal/domain"
+	"github.com/jedi-knights/go-semantic-release/internal/ports"
 )
+
+// Compile-time interface compliance check.
+var _ ports.ConfigProvider = (*ViperProvider)(nil)
 
 // Supported config file names, searched in order (matching semantic-release conventions).
 var configNames = []string{

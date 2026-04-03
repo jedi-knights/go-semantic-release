@@ -14,6 +14,16 @@ import (
 	"github.com/jedi-knights/go-semantic-release/internal/ports"
 )
 
+// Compile-time interface compliance checks.
+var (
+	_ ports.Plugin                 = (*Plugin)(nil)
+	_ ports.VerifyConditionsPlugin = (*Plugin)(nil)
+	_ ports.PublishPlugin          = (*Plugin)(nil)
+	_ ports.AddChannelPlugin       = (*Plugin)(nil)
+	_ ports.SuccessPlugin          = (*Plugin)(nil)
+	_ ports.FailPlugin             = (*Plugin)(nil)
+)
+
 // PluginConfig holds configuration for the GitLab plugin.
 type PluginConfig struct {
 	ProjectID  string   `mapstructure:"project_id"`

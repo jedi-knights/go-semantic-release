@@ -15,6 +15,11 @@ const (
 	StepFail             Step = "fail"
 )
 
+// String returns the string representation of the lifecycle step.
+func (s Step) String() string {
+	return string(s)
+}
+
 // StepOrder defines the canonical execution order for lifecycle steps.
 var StepOrder = []Step{
 	StepVerifyConditions,

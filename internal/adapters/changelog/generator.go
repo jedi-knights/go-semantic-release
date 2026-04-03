@@ -8,7 +8,11 @@ import (
 	"time"
 
 	"github.com/jedi-knights/go-semantic-release/internal/domain"
+	"github.com/jedi-knights/go-semantic-release/internal/ports"
 )
+
+// Compile-time interface compliance check.
+var _ ports.ChangelogGenerator = (*TemplateGenerator)(nil)
 
 const defaultTemplate = `## {{if .Project}}[{{.Project}}] {{end}}{{.Version}} ({{.Date}})
 {{range .Sections}}

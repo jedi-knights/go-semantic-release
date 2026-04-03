@@ -4,7 +4,11 @@ import (
 	"fmt"
 
 	"github.com/jedi-knights/go-semantic-release/internal/domain"
+	"github.com/jedi-knights/go-semantic-release/internal/ports"
 )
+
+// Compile-time interface compliance check.
+var _ ports.VersionCalculator = (*VersionCalculatorService)(nil)
 
 // VersionCalculatorService implements ports.VersionCalculator.
 type VersionCalculatorService struct{}

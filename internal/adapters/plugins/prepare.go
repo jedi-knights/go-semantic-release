@@ -11,6 +11,12 @@ import (
 	"github.com/jedi-knights/go-semantic-release/internal/ports"
 )
 
+// Compile-time interface compliance checks.
+var (
+	_ ports.Plugin        = (*PreparePlugin)(nil)
+	_ ports.PreparePlugin = (*PreparePlugin)(nil)
+)
+
 // PreparePlugin updates files (CHANGELOG.md, VERSION) before the release is published.
 type PreparePlugin struct {
 	fs              ports.FileSystem

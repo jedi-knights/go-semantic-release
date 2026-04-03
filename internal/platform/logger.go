@@ -5,7 +5,12 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/jedi-knights/go-semantic-release/internal/ports"
 )
+
+// Compile-time interface compliance check.
+var _ ports.Logger = (*ConsoleLogger)(nil)
 
 // ConsoleLogger implements ports.Logger with formatted console output.
 type ConsoleLogger struct {

@@ -9,6 +9,21 @@ import (
 	"strings"
 
 	"github.com/jedi-knights/go-semantic-release/internal/domain"
+	"github.com/jedi-knights/go-semantic-release/internal/ports"
+)
+
+// Compile-time interface compliance checks.
+var (
+	_ ports.Plugin                 = (*ExternalPlugin)(nil)
+	_ ports.VerifyConditionsPlugin = (*ExternalPlugin)(nil)
+	_ ports.AnalyzeCommitsPlugin   = (*ExternalPlugin)(nil)
+	_ ports.VerifyReleasePlugin    = (*ExternalPlugin)(nil)
+	_ ports.GenerateNotesPlugin    = (*ExternalPlugin)(nil)
+	_ ports.PreparePlugin          = (*ExternalPlugin)(nil)
+	_ ports.PublishPlugin          = (*ExternalPlugin)(nil)
+	_ ports.AddChannelPlugin       = (*ExternalPlugin)(nil)
+	_ ports.SuccessPlugin          = (*ExternalPlugin)(nil)
+	_ ports.FailPlugin             = (*ExternalPlugin)(nil)
 )
 
 // ExternalPlugin wraps an external executable as a lifecycle plugin.

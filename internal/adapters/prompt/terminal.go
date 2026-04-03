@@ -6,7 +6,12 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/jedi-knights/go-semantic-release/internal/ports"
 )
+
+// Compile-time interface compliance check.
+var _ ports.Prompter = (*TerminalPrompter)(nil)
 
 // TerminalPrompter prompts the user via stdin/stdout.
 type TerminalPrompter struct {

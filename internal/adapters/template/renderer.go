@@ -4,7 +4,12 @@ import (
 	"bytes"
 	"fmt"
 	"text/template"
+
+	"github.com/jedi-knights/go-semantic-release/internal/ports"
 )
+
+// Compile-time interface compliance check.
+var _ ports.TemplateRenderer = (*GoTemplateRenderer)(nil)
 
 // GoTemplateRenderer implements ports.TemplateRenderer using Go's text/template.
 type GoTemplateRenderer struct{}

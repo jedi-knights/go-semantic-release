@@ -7,6 +7,12 @@ import (
 	"github.com/jedi-knights/go-semantic-release/internal/ports"
 )
 
+// Compile-time interface compliance checks.
+var (
+	_ ports.Plugin              = (*ReleaseNotesPlugin)(nil)
+	_ ports.GenerateNotesPlugin = (*ReleaseNotesPlugin)(nil)
+)
+
 // ReleaseNotesPlugin implements GenerateNotesPlugin using a changelog generator.
 type ReleaseNotesPlugin struct {
 	generator ports.ChangelogGenerator

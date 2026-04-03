@@ -4,7 +4,12 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+
+	"github.com/jedi-knights/go-semantic-release/internal/ports"
 )
+
+// Compile-time interface compliance check.
+var _ ports.FileSystem = (*OSFileSystem)(nil)
 
 // OSFileSystem implements ports.FileSystem using the real filesystem.
 type OSFileSystem struct{}

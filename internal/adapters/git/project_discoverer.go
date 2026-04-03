@@ -11,6 +11,14 @@ import (
 	"github.com/jedi-knights/go-semantic-release/internal/ports"
 )
 
+// Compile-time interface compliance checks.
+var (
+	_ ports.ProjectDiscoverer = (*WorkspaceDiscoverer)(nil)
+	_ ports.ProjectDiscoverer = (*ModuleDiscoverer)(nil)
+	_ ports.ProjectDiscoverer = (*ConfiguredDiscoverer)(nil)
+	_ ports.ProjectDiscoverer = (*CompositeDiscoverer)(nil)
+)
+
 // WorkspaceDiscoverer discovers projects from go.work files.
 type WorkspaceDiscoverer struct {
 	fs ports.FileSystem

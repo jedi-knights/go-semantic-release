@@ -7,6 +7,12 @@ import (
 	"github.com/jedi-knights/go-semantic-release/internal/ports"
 )
 
+// Compile-time interface compliance checks.
+var (
+	_ ports.Plugin               = (*CommitAnalyzerPlugin)(nil)
+	_ ports.AnalyzeCommitsPlugin = (*CommitAnalyzerPlugin)(nil)
+)
+
 // CommitAnalyzerPlugin implements AnalyzeCommitsPlugin using conventional commits.
 type CommitAnalyzerPlugin struct {
 	parser      ports.CommitParser

@@ -13,6 +13,9 @@ import (
 	"github.com/jedi-knights/go-semantic-release/internal/ports"
 )
 
+// Compile-time interface compliance check.
+var _ ports.ReleasePublisher = (*Publisher)(nil)
+
 // Publisher implements ports.ReleasePublisher for GitHub Releases.
 type Publisher struct {
 	owner  string
