@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -13,38 +14,59 @@ import (
 	"github.com/jedi-knights/go-semantic-release/internal/platform"
 )
 
+// CLI flags matching the original semantic-release exactly.
 var (
+	// Original semantic-release flags.
+	branches      []string
+	repositoryURL string
+	tagFormat     string
+	plugins       []string
+	extends       []string
+	dryRun        bool
+	ciFlag        bool
+	noCIFlag      bool
+	debug         bool
+
+	// Extension flags (Go-specific).
 	cfgFile string
-	dryRun  bool
 	project string
 	jsonOut bool
-	ciFlag  bool
-	noCIFlag bool
-	debug   bool
 )
 
 // NewRootCmd creates the root cobra command.
+// The default action (no subcommand) runs the release, matching the original semantic-release behavior.
 func NewRootCmd() *cobra.Command {
 	root := &cobra.Command{
-		Use:   "semantic-release",
-		Short: "Semantic release utility for Go projects",
-		Long: `semantic-release is a native Go semantic release utility that analyzes
-conventional commits to determine the next version, generate changelogs,
-create tags, and publish releases. It supports monorepos with independent
-project versioning.`,
+		Use:   "semantic-release [options]",
+		Short: "Run automated package publishing",
+		Long: `semantic-release automates the whole package release workflow including:
+determining the next version number, generating the release notes,
+and publishing the package.
+
+This is a native Go implementation compatible with the semantic-release CLI.`,
 		SilenceUsage: true,
+		RunE:         runRelease,
 	}
 
-	root.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default: .semantic-release.yaml)")
-	root.PersistentFlags().BoolVarP(&dryRun, "dry-run", "d", false, "perform a dry run without mutations")
-	root.PersistentFlags().StringVar(&project, "project", "", "target a specific project in a monorepo")
-	root.PersistentFlags().BoolVar(&jsonOut, "json", false, "output in JSON format")
-	root.PersistentFlags().BoolVar(&ciFlag, "ci", false, "force CI mode")
-	root.PersistentFlags().BoolVar(&noCIFlag, "no-ci", false, "skip CI environment verification")
-	root.PersistentFlags().BoolVar(&debug, "debug", false, "enable debug output")
+	// Flags matching the original semantic-release CLI (persistent so subcommands inherit them).
+	pf := root.PersistentFlags()
+	pf.StringArrayVarP(&branches, "branches", "b", nil, "Git branches to release from")
+	pf.StringVarP(&repositoryURL, "repository-url", "r", "", "Git repository URL")
+	pf.StringVarP(&tagFormat, "tag-format", "t", "", "Git tag format")
+	pf.StringArrayVarP(&plugins, "plugins", "p", nil, "Plugins")
+	pf.StringArrayVarP(&extends, "extends", "e", nil, "Shareable configurations")
+	pf.BoolVarP(&dryRun, "dry-run", "d", false, "Skip publishing")
+	pf.BoolVar(&ciFlag, "ci", false, "Toggle CI verifications")
+	pf.BoolVar(&noCIFlag, "no-ci", false, "Skip CI verifications")
+	pf.BoolVar(&debug, "debug", false, "Output debugging information")
 
+	// Extension flags (Go-specific, also persistent).
+	pf.StringVar(&cfgFile, "config", "", "config file (default: .semantic-release.yaml)")
+	pf.StringVar(&project, "project", "", "target a specific project in a monorepo")
+	pf.BoolVar(&jsonOut, "json", false, "output in JSON format")
+
+	// Subcommands are Go-specific extensions beyond the original semantic-release.
 	root.AddCommand(
-		newReleaseCmd(),
 		newPlanCmd(),
 		newVersionCmd(),
 		newChangelogCmd(),
@@ -63,12 +85,48 @@ func buildContainer() (*di.Container, error) {
 		return nil, fmt.Errorf("loading config: %w", err)
 	}
 
-	// Apply CLI flag overrides.
+	// Apply CLI flag overrides matching original semantic-release behavior.
+	applyFlagOverrides(&cfg)
+
+	workDir, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("getting working directory: %w", err)
+	}
+
+	container := di.NewContainer(cfg, workDir)
+	if cfg.Debug {
+		container.WithLogger(platform.NewConsoleLogger(os.Stderr, platform.LogDebug))
+	}
+
+	return container, nil
+}
+
+func applyFlagOverrides(cfg *domain.Config) {
 	if dryRun || viper.GetBool("dry_run") {
 		cfg.DryRun = true
 	}
 	if debug {
 		cfg.Debug = true
+	}
+
+	// --branches / -b overrides config branches.
+	if len(branches) > 0 {
+		cfg.Branches = parseBranchFlags(branches)
+	}
+
+	// --repository-url / -r overrides config.
+	if repositoryURL != "" {
+		cfg.RepositoryURL = repositoryURL
+	}
+
+	// --tag-format / -t overrides config.
+	if tagFormat != "" {
+		cfg.TagFormat = tagFormat
+	}
+
+	// --extends / -e overrides config.
+	if len(extends) > 0 {
+		cfg.Extends = extends
 	}
 
 	// CI detection: --ci forces CI mode, --no-ci disables it,
@@ -86,18 +144,25 @@ func buildContainer() (*di.Container, error) {
 	if !isCI && !dryRun {
 		cfg.DryRun = true
 	}
+}
 
-	workDir, err := os.Getwd()
-	if err != nil {
-		return nil, fmt.Errorf("getting working directory: %w", err)
+// parseBranchFlags converts CLI branch strings into BranchPolicy entries.
+func parseBranchFlags(branchNames []string) []domain.BranchPolicy {
+	var policies []domain.BranchPolicy
+	for _, name := range branchNames {
+		// Support comma-separated values.
+		for _, n := range strings.Split(name, ",") {
+			n = strings.TrimSpace(n)
+			if n == "" {
+				continue
+			}
+			policies = append(policies, domain.BranchPolicy{
+				Name:      n,
+				IsDefault: n == "main" || n == "master",
+			})
+		}
 	}
-
-	container := di.NewContainer(cfg, workDir)
-	if cfg.Debug {
-		container.WithLogger(platform.NewConsoleLogger(os.Stderr, platform.LogDebug))
-	}
-
-	return container, nil
+	return policies
 }
 
 func getConfig() (domain.Config, error) {

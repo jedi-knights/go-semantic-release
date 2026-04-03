@@ -11,16 +11,8 @@ import (
 	"github.com/jedi-knights/go-semantic-release/internal/domain"
 )
 
-func newReleaseCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "release",
-		Short: "Perform a semantic release",
-		Long: `Analyze commits, calculate the next version, generate release notes,
-create git tags, and publish a release. Use --dry-run to preview without mutations.`,
-		RunE: runRelease,
-	}
-}
-
+// runRelease is the default action when semantic-release is invoked without a subcommand.
+// This matches the original semantic-release behavior.
 func runRelease(cmd *cobra.Command, _ []string) error {
 	ctx := context.Background()
 
