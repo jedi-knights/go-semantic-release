@@ -63,6 +63,15 @@ func (p *ViperProvider) Load(path string) (domain.Config, error) {
 		return cfg, fmt.Errorf("unmarshaling config: %w", err)
 	}
 
+	// Resolve extended configurations.
+	if len(cfg.Extends) > 0 {
+		resolved, err := ResolveExtends(cfg)
+		if err != nil {
+			return cfg, fmt.Errorf("resolving extends: %w", err)
+		}
+		cfg = resolved
+	}
+
 	return cfg, nil
 }
 

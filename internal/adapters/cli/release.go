@@ -8,7 +8,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/jedi-knights/go-semantic-release/internal/adapters/prompt"
 	"github.com/jedi-knights/go-semantic-release/internal/domain"
+	"github.com/jedi-knights/go-semantic-release/internal/platform"
 )
 
 // runRelease is the default action when semantic-release is invoked without a subcommand.
@@ -55,6 +57,22 @@ func runRelease(cmd *cobra.Command, _ []string) error {
 	if !plan.HasReleasableProjects() {
 		fmt.Fprintln(os.Stdout, "No releasable changes found.")
 		return nil
+	}
+
+	// Interactive confirmation before release.
+	if shouldPrompt(cfg) {
+		if planErr := printPlan(plan); planErr != nil {
+			return planErr
+		}
+		prompter := prompt.NewTerminalPrompter()
+		confirmed, promptErr := prompter.Confirm("Proceed with release?")
+		if promptErr != nil {
+			return fmt.Errorf("reading confirmation: %w", promptErr)
+		}
+		if !confirmed {
+			fmt.Println("Release cancelled.")
+			return nil
+		}
 	}
 
 	// Execute release.
@@ -108,4 +126,19 @@ func filterProject(projects []domain.Project, name string) []domain.Project {
 func getWorkDir() string {
 	dir, _ := os.Getwd()
 	return dir
+}
+
+// shouldPrompt determines whether to show an interactive confirmation.
+func shouldPrompt(cfg domain.Config) bool {
+	if noInteractive {
+		return false
+	}
+	if interactive {
+		return true
+	}
+	if cfg.Interactive != nil {
+		return *cfg.Interactive
+	}
+	// Auto-detect: prompt when running locally in a terminal, not in CI.
+	return !platform.IsCI() && prompt.IsTerminal()
 }

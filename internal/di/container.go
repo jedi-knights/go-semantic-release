@@ -1,10 +1,14 @@
 package di
 
 import (
+	"github.com/jedi-knights/go-semantic-release/internal/adapters/bitbucket"
 	"github.com/jedi-knights/go-semantic-release/internal/adapters/changelog"
 	adapterfs "github.com/jedi-knights/go-semantic-release/internal/adapters/fs"
 	adaptergit "github.com/jedi-knights/go-semantic-release/internal/adapters/git"
 	adaptergithub "github.com/jedi-knights/go-semantic-release/internal/adapters/github"
+	"github.com/jedi-knights/go-semantic-release/internal/adapters/gitlab"
+	adaptergogit "github.com/jedi-knights/go-semantic-release/internal/adapters/gogit"
+	adapterlint "github.com/jedi-knights/go-semantic-release/internal/adapters/lint"
 	"github.com/jedi-knights/go-semantic-release/internal/adapters/plugins"
 	"github.com/jedi-knights/go-semantic-release/internal/app"
 	"github.com/jedi-knights/go-semantic-release/internal/domain"
@@ -55,7 +59,17 @@ func (c *Container) Config() domain.Config {
 
 func (c *Container) GitRepository() ports.GitRepository {
 	if c.gitRepo == nil {
-		c.gitRepo = adaptergit.NewRepository(c.workDir)
+		if c.config.GitBackend == "go-git" {
+			repo, err := adaptergogit.NewRepository(c.workDir)
+			if err != nil {
+				c.logger.Warn("failed to open go-git repository, falling back to CLI", "error", err)
+				c.gitRepo = adaptergit.NewRepository(c.workDir)
+			} else {
+				c.gitRepo = repo
+			}
+		} else {
+			c.gitRepo = adaptergit.NewRepository(c.workDir)
+		}
 	}
 	return c.gitRepo
 }
@@ -108,7 +122,7 @@ func (c *Container) ReleasePublisher() ports.ReleasePublisher {
 
 func (c *Container) ProjectImpactAnalyzer() ports.ProjectImpactAnalyzer {
 	if c.impactAnalyzer == nil {
-		c.impactAnalyzer = adaptergit.NewPathBasedImpactAnalyzer(c.config.DependencyPropagation)
+		c.impactAnalyzer = adaptergit.NewPathBasedImpactAnalyzer(c.config.DependencyPropagation, c.config.IncludePaths, c.config.ExcludePaths)
 	}
 	return c.impactAnalyzer
 }
@@ -172,6 +186,19 @@ func (c *Container) Plugins() []ports.Plugin {
 		))
 	}
 
+	// Lint plugin: verifyRelease (commit message linting).
+	if c.config.Lint.Enabled {
+		lintCfg := c.config.Lint
+		if len(lintCfg.AllowedTypes) == 0 {
+			lintCfg = domain.DefaultLintConfig()
+			lintCfg.Enabled = true
+		}
+		ps = append(ps, plugins.NewLintPlugin(
+			adapterlint.NewConventionalLinter(lintCfg),
+			c.logger,
+		))
+	}
+
 	// GitHub plugin: verifyConditions + publish + addChannel + success + fail.
 	if c.config.GitHub.CreateRelease {
 		ps = append(ps, adaptergithub.NewPlugin(
@@ -190,6 +217,43 @@ func (c *Container) Plugins() []ports.Plugin {
 			},
 			c.logger,
 		))
+	}
+
+	// GitLab plugin: verifyConditions + publish + addChannel + success + fail.
+	if c.config.GitLab.CreateRelease {
+		ps = append(ps, gitlab.NewPlugin(
+			gitlab.PluginConfig{
+				ProjectID:  c.config.GitLab.ProjectID,
+				Token:      c.config.GitLab.Token,
+				APIURL:     c.config.GitLab.APIURL,
+				Assets:     c.config.GitLab.Assets,
+				Milestones: c.config.GitLab.Milestones,
+			},
+			c.logger,
+		))
+	}
+
+	// Bitbucket plugin: verifyConditions + publish + addChannel + success + fail.
+	if c.config.Bitbucket.CreateRelease {
+		ps = append(ps, bitbucket.NewPlugin(
+			bitbucket.PluginConfig{
+				Workspace: c.config.Bitbucket.Workspace,
+				RepoSlug:  c.config.Bitbucket.RepoSlug,
+				Token:     c.config.Bitbucket.Token,
+				APIURL:    c.config.Bitbucket.APIURL,
+			},
+			c.logger,
+		))
+	}
+
+	// External plugins from config/flags.
+	if len(c.config.Plugins) > 0 {
+		external, err := plugins.LoadExternalPlugins(c.config.Plugins)
+		if err != nil {
+			c.logger.Warn("failed to load external plugins", "error", err)
+		} else {
+			ps = append(ps, external...)
+		}
 	}
 
 	return ps

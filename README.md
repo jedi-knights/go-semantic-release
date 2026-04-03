@@ -321,13 +321,13 @@ internal/di/             # DI container wiring
 - [x] CI environment auto-detection
 - [x] Maintenance branch support with version ranges
 - [x] GitHub PR/issue commenting, failure issues, asset uploads
-- [ ] GitLab/Bitbucket adapters
-- [ ] go-git adapter (no CLI dependency)
-- [ ] Glob-based path include/exclude filtering
-- [ ] Shareable configuration loading (`--extends`)
-- [ ] External plugin loading (`--plugins`)
-- [ ] Commit message linting
-- [ ] Interactive mode for release confirmation
+- [x] GitLab/Bitbucket adapters
+- [x] go-git adapter (no CLI dependency)
+- [x] Glob-based path include/exclude filtering
+- [x] Shareable configuration loading (`--extends`)
+- [x] External plugin loading (`--plugins`)
+- [x] Commit message linting
+- [x] Interactive mode for release confirmation
 
 ## License
 

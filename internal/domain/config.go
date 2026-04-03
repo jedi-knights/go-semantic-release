@@ -36,8 +36,45 @@ type Config struct {
 	// GitHub integration.
 	GitHub GitHubConfig `mapstructure:"github"`
 
+	// GitLab integration.
+	GitLab GitLabConfig `mapstructure:"gitlab"`
+
+	// Bitbucket integration.
+	Bitbucket BitbucketConfig `mapstructure:"bitbucket"`
+
+	// Commit linting.
+	Lint LintConfig `mapstructure:"lint"`
+
+	// Interactive mode.
+	Interactive *bool `mapstructure:"interactive"`
+
+	// Git backend: "cli" (default) or "go-git".
+	GitBackend string `mapstructure:"git_backend"`
+
+	// Plugin references for external plugin loading.
+	Plugins []string `mapstructure:"plugins"`
+
 	// Extends allows inheriting from shared configurations.
 	Extends []string `mapstructure:"extends"`
+}
+
+// GitLabConfig holds GitLab-specific settings.
+type GitLabConfig struct {
+	ProjectID     string   `mapstructure:"project_id"`
+	Token         string   `mapstructure:"token"`
+	APIURL        string   `mapstructure:"api_url"`
+	CreateRelease bool     `mapstructure:"create_release"`
+	Assets        []string `mapstructure:"assets"`
+	Milestones    []string `mapstructure:"milestones"`
+}
+
+// BitbucketConfig holds Bitbucket-specific settings.
+type BitbucketConfig struct {
+	Workspace     string `mapstructure:"workspace"`
+	RepoSlug      string `mapstructure:"repo_slug"`
+	Token         string `mapstructure:"token"`
+	APIURL        string `mapstructure:"api_url"`
+	CreateRelease bool   `mapstructure:"create_release"`
 }
 
 // PrepareConfig holds settings for the prepare lifecycle step.

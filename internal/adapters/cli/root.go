@@ -28,9 +28,11 @@ var (
 	debug         bool
 
 	// Extension flags (Go-specific).
-	cfgFile string
-	project string
-	jsonOut bool
+	cfgFile       string
+	project       string
+	jsonOut       bool
+	interactive   bool
+	noInteractive bool
 )
 
 // NewRootCmd creates the root cobra command.
@@ -64,6 +66,8 @@ This is a native Go implementation compatible with the semantic-release CLI.`,
 	pf.StringVar(&cfgFile, "config", "", "config file (default: .semantic-release.yaml)")
 	pf.StringVar(&project, "project", "", "target a specific project in a monorepo")
 	pf.BoolVar(&jsonOut, "json", false, "output in JSON format")
+	pf.BoolVar(&interactive, "interactive", false, "prompt for confirmation before release")
+	pf.BoolVar(&noInteractive, "no-interactive", false, "disable interactive prompts")
 
 	// Subcommands are Go-specific extensions beyond the original semantic-release.
 	root.AddCommand(
@@ -73,6 +77,7 @@ This is a native Go implementation compatible with the semantic-release CLI.`,
 		newDetectProjectsCmd(),
 		newVerifyCmd(),
 		newConfigCmd(),
+		newLintCmd(),
 	)
 
 	return root
@@ -127,6 +132,11 @@ func applyFlagOverrides(cfg *domain.Config) {
 	// --extends / -e overrides config.
 	if len(extends) > 0 {
 		cfg.Extends = extends
+	}
+
+	// --plugins / -p overrides config.
+	if len(plugins) > 0 {
+		cfg.Plugins = plugins
 	}
 
 	// CI detection: --ci forces CI mode, --no-ci disables it,
