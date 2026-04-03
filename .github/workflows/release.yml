@@ -17,7 +17,9 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # Use GITHUB_TOKEN for both checkout and push.
+          # persist-credentials keeps the token available for git push.
+          persist-credentials: true
 
       - uses: actions/setup-go@v6
         with:
@@ -32,18 +34,33 @@ jobs:
           git config user.name "semantic-release-bot"
           git config user.email "semantic-release-bot@users.noreply.github.com"
 
-      - name: Run semantic-release
+      - name: Plan release
+        id: plan
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          output=$(./bin/semantic-release plan 2>&1) || true
+          echo "$output"
+          if echo "$output" | grep -q "No releasable changes"; then
+            echo "has_release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run semantic-release
+        if: steps.plan.outputs.has_release == 'true'
+        env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./bin/semantic-release --ci --no-interactive
 
       - name: Commit release artifacts
+        if: steps.plan.outputs.has_release == 'true'
         run: |
-          if git diff --quiet CHANGELOG.md VERSION 2>/dev/null; then
+          # Stage any files written by the prepare step.
+          git add -f CHANGELOG.md VERSION 2>/dev/null || true
+          if git diff --cached --quiet; then
             echo "No release artifacts to commit."
             exit 0
           fi
-          git add CHANGELOG.md VERSION
           git commit -m "chore(release): update CHANGELOG.md and VERSION [skip ci]"
           git push

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 
 	"github.com/jedi-knights/go-semantic-release/internal/domain"
 	"github.com/jedi-knights/go-semantic-release/internal/ports"
@@ -21,7 +22,17 @@ type Publisher struct {
 }
 
 // NewPublisher creates a GitHub release publisher.
+// If token is empty, it is resolved from GH_TOKEN, GITHUB_TOKEN, or
+// SEMANTIC_RELEASE_GITHUB_TOKEN environment variables.
 func NewPublisher(owner, repo, token string) *Publisher {
+	if token == "" {
+		for _, key := range []string{"GH_TOKEN", "GITHUB_TOKEN", "SEMANTIC_RELEASE_GITHUB_TOKEN"} {
+			if v := os.Getenv(key); v != "" {
+				token = v
+				break
+			}
+		}
+	}
 	return &Publisher{
 		owner:  owner,
 		repo:   repo,
