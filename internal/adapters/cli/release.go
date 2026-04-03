@@ -75,7 +75,39 @@ func runRelease(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
-	// Execute release.
+	// Run prepare step (update CHANGELOG.md, VERSION, etc.) for each releasable project.
+	gen := container.ChangelogGenerator()
+	releasable := plan.ReleasableProjects()
+	for i := range releasable {
+		notes, notesErr := gen.Generate(releasable[i].NextVersion, releasable[i].Project.Name, releasable[i].Commits, cfg.ChangelogSections)
+		if notesErr != nil {
+			return fmt.Errorf("generating notes: %w", notesErr)
+		}
+
+		rc := &domain.ReleaseContext{
+			Config:         cfg,
+			Branch:         branch,
+			BranchPolicy:   policy,
+			DryRun:         cfg.DryRun,
+			CI:             cfg.CI,
+			RepositoryRoot: getWorkDir(),
+			CurrentProject: &releasable[i],
+			Notes:          notes,
+		}
+
+		// Run prepare plugins (update CHANGELOG.md, VERSION, etc.).
+		for _, plugin := range container.Plugins() {
+			if pp, ok := plugin.(interface {
+				Prepare(context.Context, *domain.ReleaseContext) error
+			}); ok {
+				if prepErr := pp.Prepare(ctx, rc); prepErr != nil {
+					return fmt.Errorf("prepare step: %w", prepErr)
+				}
+			}
+		}
+	}
+
+	// Execute release (create tags, push, publish).
 	result, err := container.ReleaseExecutor().Execute(ctx, plan)
 	if err != nil {
 		return fmt.Errorf("executing release: %w", err)
