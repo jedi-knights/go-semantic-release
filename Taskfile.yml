@@ -1,0 +1,105 @@
+version: "3"
+
+vars:
+  BINARY: gosemrel
+  BUILD_DIR: bin
+  MAIN: ./cmd/gosemrel
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+
+  build:
+    desc: Build the binary
+    cmds:
+      - go build -o {{.BUILD_DIR}}/{{.BINARY}} {{.MAIN}}
+    sources:
+      - "**/*.go"
+    generates:
+      - "{{.BUILD_DIR}}/{{.BINARY}}"
+
+  test:
+    desc: Run all tests
+    cmds:
+      - go test ./... -v
+
+  test:unit:
+    desc: Run unit tests with race detection
+    cmds:
+      - go test ./... -race -count=1
+
+  test:short:
+    desc: Run tests in short mode
+    cmds:
+      - go test ./... -short
+
+  lint:
+    desc: Run golangci-lint
+    cmds:
+      - golangci-lint run ./...
+
+  fmt:
+    desc: Format code with gofmt
+    cmds:
+      - gofmt -s -w .
+
+  fmt:check:
+    desc: Check formatting without modifying
+    cmds:
+      - test -z "$(gofmt -l .)"
+
+  generate:mocks:
+    desc: Generate mocks for all ports
+    cmds:
+      - >
+        mockgen
+        -destination=internal/ports/mocks/mocks.go
+        -package=mocks
+        github.com/jedi-knights/go-semantic-release/internal/ports
+        GitRepository,CommitParser,ProjectDiscoverer,ProjectImpactAnalyzer,VersionCalculator,ChangelogGenerator,TagService,ReleasePublisher,ConfigProvider,FileSystem,TemplateRenderer,Logger,Clock
+
+  coverage:
+    desc: Run tests with coverage report
+    cmds:
+      - go test ./... -coverprofile=coverage.out -covermode=atomic
+      - go tool cover -func=coverage.out
+    generates:
+      - coverage.out
+
+  coverage:html:
+    desc: Open coverage report in browser
+    deps: [coverage]
+    cmds:
+      - go tool cover -html=coverage.out -o coverage.html
+
+  ci:
+    desc: Run all CI checks
+    cmds:
+      - task: fmt:check
+      - task: lint
+      - task: test:unit
+      - task: build
+
+  run:
+    desc: Build and run the binary
+    deps: [build]
+    cmds:
+      - ./{{.BUILD_DIR}}/{{.BINARY}} {{.CLI_ARGS}}
+
+  release:dry-run:
+    desc: Perform a dry-run release
+    deps: [build]
+    cmds:
+      - ./{{.BUILD_DIR}}/{{.BINARY}} release --dry-run
+
+  clean:
+    desc: Remove build artifacts
+    cmds:
+      - rm -rf {{.BUILD_DIR}} coverage.out coverage.html
+
+  tidy:
+    desc: Tidy go modules
+    cmds:
+      - go mod tidy

@@ -1,0 +1,44 @@
+# gosemrel configuration
+# See README.md for full documentation
+
+release_mode: repo
+tag_format: "v{{.Version}}"
+project_tag_format: "{{.Project}}/v{{.Version}}"
+dry_run: false
+discover_modules: false
+dependency_propagation: false
+
+branches:
+  - name: main
+    is_default: true
+  - name: master
+    is_default: true
+  - name: next
+    prerelease: true
+    channel: next
+  - name: beta
+    prerelease: true
+    channel: beta
+  - name: alpha
+    prerelease: true
+    channel: alpha
+
+# Uncomment for monorepo with independent projects:
+# release_mode: independent
+# projects:
+#   - name: api
+#     path: services/api
+#     tag_prefix: "api/"
+#   - name: worker
+#     path: services/worker
+#     tag_prefix: "worker/"
+#     dependencies:
+#       - shared
+#   - name: shared
+#     path: pkg/shared
+#     tag_prefix: "shared/"
+
+github:
+  create_release: true
+  # owner and repo are auto-detected from git remote
+  # token is read from GOSEMREL_GITHUB_TOKEN env var
