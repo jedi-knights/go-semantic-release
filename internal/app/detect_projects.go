@@ -29,7 +29,7 @@ func (d *ProjectDetector) Detect(ctx context.Context, rootPath string) ([]domain
 	if len(projects) == 0 {
 		d.logger.Info("no projects discovered, using root project")
 		return []domain.Project{{
-			Name: "root",
+			Name: "",
 			Path: ".",
 			Type: domain.ProjectTypeRoot,
 		}}, nil

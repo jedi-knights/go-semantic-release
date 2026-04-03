@@ -17,8 +17,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          # Use GITHUB_TOKEN for both checkout and push.
-          # persist-credentials keeps the token available for git push.
+          fetch-tags: true
           persist-credentials: true
 
       - uses: actions/setup-go@v6
