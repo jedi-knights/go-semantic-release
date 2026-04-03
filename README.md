@@ -39,7 +39,13 @@ go build -o bin/semantic-release ./cmd/semantic-release
 # Initialize config
 semantic-release config init
 
-# See what would happen
+# Perform a release (default action, same as original semantic-release)
+semantic-release
+
+# Dry run
+semantic-release --dry-run
+
+# See what would happen (extended command)
 semantic-release plan
 
 # Preview the next version
@@ -47,38 +53,50 @@ semantic-release version
 
 # Generate changelog
 semantic-release changelog
-
-# Perform a release
-semantic-release release
-
-# Dry run
-semantic-release release --dry-run
 ```
 
-## Commands
+## Usage
+
+Running `semantic-release` with no subcommand performs the release — this matches the original [semantic-release](https://github.com/semantic-release/semantic-release) behavior exactly.
+
+```bash
+semantic-release [options]
+```
+
+### CLI Flags (compatible with semantic-release)
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--branches` | `-b` | Git branches to release from |
+| `--repository-url` | `-r` | Git repository URL |
+| `--tag-format` | `-t` | Git tag format |
+| `--plugins` | `-p` | Plugins |
+| `--extends` | `-e` | Shareable configurations |
+| `--dry-run` | `-d` | Skip publishing |
+| `--ci` | | Toggle CI verifications |
+| `--no-ci` | | Skip CI verifications |
+| `--debug` | | Output debugging information |
+
+### Extension Flags (Go-specific)
+
+| Flag | Description |
+|------|-------------|
+| `--config` | Path to config file (default: `.semantic-release.yaml`) |
+| `--project` | Target a specific project in a monorepo |
+| `--json` | Output in JSON format |
+
+### Extension Subcommands
+
+These are additional commands beyond the original semantic-release:
 
 | Command | Description |
 |---------|-------------|
-| `semantic-release release` | Analyze commits, tag, and publish a release |
-| `semantic-release release --project api` | Release a specific project in a monorepo |
 | `semantic-release plan` | Show the release plan without executing |
 | `semantic-release version` | Display current and next version |
 | `semantic-release changelog` | Generate release notes |
 | `semantic-release detect-projects` | List discovered projects |
 | `semantic-release verify` | Check release prerequisites |
 | `semantic-release config init` | Create a default config file |
-
-### Global Flags
-
-| Flag | Description |
-|------|-------------|
-| `--config` | Path to config file (default: `.semantic-release.yaml`) |
-| `-d`, `--dry-run` | Preview without mutations |
-| `--project` | Target a specific project |
-| `--json` | Output in JSON format |
-| `--ci` | Force CI mode |
-| `--no-ci` | Skip CI environment verification (allow local releases) |
-| `--debug` | Enable debug output |
 
 ## Configuration
 
@@ -297,13 +315,17 @@ internal/di/             # DI container wiring
 
 ## Roadmap
 
-- [ ] Plugin system for custom pipeline steps
-- [ ] Changelog file writing (CHANGELOG.md)
-- [ ] Version file updates (VERSION, package.json)
+- [x] Plugin lifecycle pipeline (9 steps)
+- [x] Changelog file writing (CHANGELOG.md) via prepare step
+- [x] Version file updates (VERSION) via prepare step
+- [x] CI environment auto-detection
+- [x] Maintenance branch support with version ranges
+- [x] GitHub PR/issue commenting, failure issues, asset uploads
 - [ ] GitLab/Bitbucket adapters
 - [ ] go-git adapter (no CLI dependency)
 - [ ] Glob-based path include/exclude filtering
-- [ ] Release-please compatibility mode
+- [ ] Shareable configuration loading (`--extends`)
+- [ ] External plugin loading (`--plugins`)
 - [ ] Commit message linting
 - [ ] Interactive mode for release confirmation
 
