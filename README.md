@@ -73,13 +73,18 @@ semantic-release release --dry-run
 | Flag | Description |
 |------|-------------|
 | `--config` | Path to config file (default: `.semantic-release.yaml`) |
-| `--dry-run` | Preview without mutations |
+| `-d`, `--dry-run` | Preview without mutations |
 | `--project` | Target a specific project |
 | `--json` | Output in JSON format |
+| `--ci` | Force CI mode |
+| `--no-ci` | Skip CI environment verification (allow local releases) |
+| `--debug` | Enable debug output |
 
 ## Configuration
 
-Configuration is loaded from `.semantic-release.yaml`, environment variables (prefix `SEMANTIC_RELEASE_`), and CLI flags.
+Configuration is loaded from `.semantic-release.yaml`, `.releaserc.yaml`, `.releaserc.json`, or `release.config.yaml`, plus environment variables (prefix `SEMANTIC_RELEASE_`), and CLI flags. CLI flags take precedence over config files.
+
+When not running in CI, dry-run mode is enabled by default. Use `--no-ci` to run locally without dry-run.
 
 ### Repository-wide release (default)
 
@@ -130,12 +135,54 @@ discover_modules: true
 branches:
   - name: main
     is_default: true
+  - name: next
+    prerelease: true
+    channel: next
+  - name: next-major
+    prerelease: true
+    channel: next-major
   - name: beta
     prerelease: true
     channel: beta
   - name: alpha
     prerelease: true
     channel: alpha
+```
+
+Maintenance branches (e.g., `1.x`, `1.0.x`) are auto-detected by name pattern. You can also configure them explicitly:
+
+```yaml
+branches:
+  - name: "1.x"
+    range: "1.x"
+    channel: "release-1.x"
+    branch_type: maintenance
+  - name: "1.0.x"
+    range: "1.0.x"
+    channel: "release-1.0.x"
+    branch_type: maintenance
+  - name: main
+    is_default: true
+```
+
+Maintenance branches enforce version range constraints — a `1.0.x` branch only allows patch bumps, and a `1.x` branch allows patch and minor bumps but not major.
+
+### Prepare step (file updates)
+
+```yaml
+prepare:
+  changelog_file: CHANGELOG.md
+  version_file: VERSION
+```
+
+When configured, the prepare step updates `CHANGELOG.md` (prepending new entries) and `VERSION` (with the new version string) before the release is published.
+
+### Git identity
+
+```yaml
+git_author:
+  name: semantic-release-bot
+  email: semantic-release-bot@users.noreply.github.com
 ```
 
 ### GitHub settings
@@ -145,7 +192,17 @@ github:
   create_release: true
   owner: jedi-knights
   repo: go-semantic-release
-  # token: set via SEMANTIC_RELEASE_GITHUB_TOKEN env var
+  draft_release: false
+  assets:
+    - "dist/*.tar.gz"
+    - "dist/*.zip"
+  success_comment: "🎉 Released in {{.Version}}"
+  released_labels:
+    - released
+  fail_labels:
+    - semantic-release
+  discussion_category_name: "Announcements"
+  # token: set via GH_TOKEN, GITHUB_TOKEN, or SEMANTIC_RELEASE_GITHUB_TOKEN
 ```
 
 ## Architecture
@@ -170,16 +227,23 @@ internal/
   platform/            # Cross-cutting concerns (logger, clock)
 ```
 
-### Release Pipeline
+### Release Lifecycle
 
-1. **Verify conditions** — check branch policy, GitHub config
-2. **Discover projects** — find projects via workspace/modules/config
-3. **Analyze commits** — parse conventional commits since last tag
-4. **Map impact** — associate changed files to projects
-5. **Calculate versions** — determine next version per project
-6. **Generate notes** — create markdown changelogs
-7. **Create tags** — git tag + push
-8. **Publish** — create GitHub release
+The release pipeline follows the same 9-step lifecycle as [semantic-release](https://github.com/semantic-release/semantic-release):
+
+| Step | Description | Plugins |
+|------|-------------|---------|
+| **verifyConditions** | Check prerequisites (git access, GitHub token) | git, github |
+| **analyzeCommits** | Determine release type from conventional commits | commit-analyzer |
+| **verifyRelease** | Validate the pending release | (extensible) |
+| **generateNotes** | Create release notes from commits | release-notes-generator |
+| **prepare** | Update CHANGELOG.md, VERSION files | prepare-files |
+| **publish** | Create git tag, push, create GitHub release | git, github |
+| **addChannel** | Update release prerelease status on GitHub | github |
+| **success** | Comment on PRs/issues, apply labels | github |
+| **fail** | Open/update failure issue on GitHub | github |
+
+Each step is implemented as a plugin interface. Multiple plugins can implement the same step — for `analyzeCommits`, the highest release type wins; for `generateNotes`, outputs are concatenated. In dry-run mode, steps after `generateNotes` are skipped.
 
 ### Monorepo Support
 

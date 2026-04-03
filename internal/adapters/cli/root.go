@@ -10,6 +10,7 @@ import (
 	adapterconfig "github.com/jedi-knights/go-semantic-release/internal/adapters/config"
 	"github.com/jedi-knights/go-semantic-release/internal/di"
 	"github.com/jedi-knights/go-semantic-release/internal/domain"
+	"github.com/jedi-knights/go-semantic-release/internal/platform"
 )
 
 var (
@@ -17,6 +18,9 @@ var (
 	dryRun  bool
 	project string
 	jsonOut bool
+	ciFlag  bool
+	noCIFlag bool
+	debug   bool
 )
 
 // NewRootCmd creates the root cobra command.
@@ -32,9 +36,12 @@ project versioning.`,
 	}
 
 	root.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default: .semantic-release.yaml)")
-	root.PersistentFlags().BoolVar(&dryRun, "dry-run", false, "perform a dry run without mutations")
+	root.PersistentFlags().BoolVarP(&dryRun, "dry-run", "d", false, "perform a dry run without mutations")
 	root.PersistentFlags().StringVar(&project, "project", "", "target a specific project in a monorepo")
 	root.PersistentFlags().BoolVar(&jsonOut, "json", false, "output in JSON format")
+	root.PersistentFlags().BoolVar(&ciFlag, "ci", false, "force CI mode")
+	root.PersistentFlags().BoolVar(&noCIFlag, "no-ci", false, "skip CI environment verification")
+	root.PersistentFlags().BoolVar(&debug, "debug", false, "enable debug output")
 
 	root.AddCommand(
 		newReleaseCmd(),
@@ -60,13 +67,37 @@ func buildContainer() (*di.Container, error) {
 	if dryRun || viper.GetBool("dry_run") {
 		cfg.DryRun = true
 	}
+	if debug {
+		cfg.Debug = true
+	}
+
+	// CI detection: --ci forces CI mode, --no-ci disables it,
+	// otherwise auto-detect and default dry-run when not in CI.
+	isCI := platform.IsCI()
+	if ciFlag {
+		isCI = true
+	}
+	if noCIFlag {
+		isCI = false
+	}
+	cfg.CI = isCI
+
+	// When not in CI and dry-run wasn't explicitly set, default to dry-run.
+	if !isCI && !dryRun {
+		cfg.DryRun = true
+	}
 
 	workDir, err := os.Getwd()
 	if err != nil {
 		return nil, fmt.Errorf("getting working directory: %w", err)
 	}
 
-	return di.NewContainer(cfg, workDir), nil
+	container := di.NewContainer(cfg, workDir)
+	if cfg.Debug {
+		container.WithLogger(platform.NewConsoleLogger(os.Stderr, platform.LogDebug))
+	}
+
+	return container, nil
 }
 
 func getConfig() (domain.Config, error) {

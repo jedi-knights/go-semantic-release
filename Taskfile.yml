@@ -58,7 +58,7 @@ tasks:
         -destination=internal/ports/mocks/mocks.go
         -package=mocks
         github.com/jedi-knights/go-semantic-release/internal/ports
-        GitRepository,CommitParser,ProjectDiscoverer,ProjectImpactAnalyzer,VersionCalculator,ChangelogGenerator,TagService,ReleasePublisher,ConfigProvider,FileSystem,TemplateRenderer,Logger,Clock
+        GitRepository,CommitParser,ProjectDiscoverer,ProjectImpactAnalyzer,VersionCalculator,ChangelogGenerator,TagService,ReleasePublisher,ConfigProvider,FileSystem,TemplateRenderer,Logger,Clock,Plugin,VerifyConditionsPlugin,AnalyzeCommitsPlugin,VerifyReleasePlugin,GenerateNotesPlugin,PreparePlugin,PublishPlugin,AddChannelPlugin,SuccessPlugin,FailPlugin
 
   coverage:
     desc: Run tests with coverage report

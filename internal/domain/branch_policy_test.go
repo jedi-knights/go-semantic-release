@@ -20,6 +20,7 @@ func TestFindBranchPolicy(t *testing.T) {
 		{"beta branch", "beta", true, true},
 		{"alpha branch", "alpha", true, true},
 		{"next branch", "next", true, true},
+		{"next-major branch", "next-major", true, true},
 		{"unknown branch", "feature/foo", false, false},
 	}
 
@@ -29,8 +30,188 @@ func TestFindBranchPolicy(t *testing.T) {
 			if (policy != nil) != tt.wantFound {
 				t.Errorf("found = %v, wantFound = %v", policy != nil, tt.wantFound)
 			}
-			if policy != nil && policy.Prerelease != tt.wantPrerel {
-				t.Errorf("prerelease = %v, want %v", policy.Prerelease, tt.wantPrerel)
+			if policy != nil && policy.IsPrerelease() != tt.wantPrerel {
+				t.Errorf("prerelease = %v, want %v", policy.IsPrerelease(), tt.wantPrerel)
+			}
+		})
+	}
+}
+
+func TestFindBranchPolicy_AutoDetectMaintenance(t *testing.T) {
+	tests := []struct {
+		name   string
+		branch string
+		want   bool
+	}{
+		{"1.x maintenance", "1.x", true},
+		{"1.0.x maintenance", "1.0.x", true},
+		{"2.x maintenance", "2.x", true},
+		{"not maintenance", "feature-x", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			policy := domain.FindBranchPolicy(nil, tt.branch)
+			found := policy != nil && policy.IsMaintenance()
+			if found != tt.want {
+				t.Errorf("auto-detect maintenance = %v, want %v", found, tt.want)
+			}
+		})
+	}
+}
+
+func TestMaintenanceRange(t *testing.T) {
+	tests := []struct {
+		name    string
+		policy  domain.BranchPolicy
+		wantMin domain.Version
+		wantMax domain.Version
+		wantErr bool
+	}{
+		{
+			name:    "major range 1.x",
+			policy:  domain.BranchPolicy{Range: "1.x"},
+			wantMin: domain.NewVersion(1, 0, 0),
+			wantMax: domain.NewVersion(2, 0, 0),
+		},
+		{
+			name:    "minor range 1.2.x",
+			policy:  domain.BranchPolicy{Range: "1.2.x"},
+			wantMin: domain.NewVersion(1, 2, 0),
+			wantMax: domain.NewVersion(1, 3, 0),
+		},
+		{
+			name:    "inferred from name",
+			policy:  domain.BranchPolicy{Name: "2.x"},
+			wantMin: domain.NewVersion(2, 0, 0),
+			wantMax: domain.NewVersion(3, 0, 0),
+		},
+		{
+			name:    "invalid range",
+			policy:  domain.BranchPolicy{Range: "invalid"},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			min, max, err := tt.policy.MaintenanceRange()
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("error = %v, wantErr = %v", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+			if !min.Equal(tt.wantMin) {
+				t.Errorf("min = %v, want %v", min, tt.wantMin)
+			}
+			if !max.Equal(tt.wantMax) {
+				t.Errorf("max = %v, want %v", max, tt.wantMax)
+			}
+		})
+	}
+}
+
+func TestVersionInRange(t *testing.T) {
+	tests := []struct {
+		name    string
+		version domain.Version
+		min     domain.Version
+		max     domain.Version
+		want    bool
+	}{
+		{
+			name:    "within range",
+			version: domain.NewVersion(1, 2, 3),
+			min:     domain.NewVersion(1, 0, 0),
+			max:     domain.NewVersion(2, 0, 0),
+			want:    true,
+		},
+		{
+			name:    "at min boundary",
+			version: domain.NewVersion(1, 0, 0),
+			min:     domain.NewVersion(1, 0, 0),
+			max:     domain.NewVersion(2, 0, 0),
+			want:    true,
+		},
+		{
+			name:    "at max boundary (exclusive)",
+			version: domain.NewVersion(2, 0, 0),
+			min:     domain.NewVersion(1, 0, 0),
+			max:     domain.NewVersion(2, 0, 0),
+			want:    false,
+		},
+		{
+			name:    "below range",
+			version: domain.NewVersion(0, 9, 0),
+			min:     domain.NewVersion(1, 0, 0),
+			max:     domain.NewVersion(2, 0, 0),
+			want:    false,
+		},
+		{
+			name:    "above range",
+			version: domain.NewVersion(3, 0, 0),
+			min:     domain.NewVersion(1, 0, 0),
+			max:     domain.NewVersion(2, 0, 0),
+			want:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := domain.VersionInRange(tt.version, tt.min, tt.max)
+			if got != tt.want {
+				t.Errorf("VersionInRange(%v, %v, %v) = %v, want %v",
+					tt.version, tt.min, tt.max, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidateMaintenanceVersion(t *testing.T) {
+	tests := []struct {
+		name    string
+		version domain.Version
+		policy  domain.BranchPolicy
+		wantErr bool
+	}{
+		{
+			name:    "valid patch in 1.0.x",
+			version: domain.NewVersion(1, 0, 5),
+			policy:  domain.BranchPolicy{Range: "1.0.x", Type: domain.BranchTypeMaintenance},
+			wantErr: false,
+		},
+		{
+			name:    "minor bump not allowed in 1.0.x",
+			version: domain.NewVersion(1, 1, 0),
+			policy:  domain.BranchPolicy{Range: "1.0.x", Type: domain.BranchTypeMaintenance},
+			wantErr: true,
+		},
+		{
+			name:    "valid minor in 1.x",
+			version: domain.NewVersion(1, 5, 0),
+			policy:  domain.BranchPolicy{Range: "1.x", Type: domain.BranchTypeMaintenance},
+			wantErr: false,
+		},
+		{
+			name:    "major bump not allowed in 1.x",
+			version: domain.NewVersion(2, 0, 0),
+			policy:  domain.BranchPolicy{Range: "1.x", Type: domain.BranchTypeMaintenance},
+			wantErr: true,
+		},
+		{
+			name:    "non-maintenance policy passes anything",
+			version: domain.NewVersion(99, 0, 0),
+			policy:  domain.BranchPolicy{Name: "main"},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := domain.ValidateMaintenanceVersion(tt.version, tt.policy)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("error = %v, wantErr = %v", err, tt.wantErr)
 			}
 		})
 	}

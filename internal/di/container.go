@@ -5,6 +5,7 @@ import (
 	adaptergit "github.com/jedi-knights/go-semantic-release/internal/adapters/git"
 	adaptergithub "github.com/jedi-knights/go-semantic-release/internal/adapters/github"
 	adapterfs "github.com/jedi-knights/go-semantic-release/internal/adapters/fs"
+	"github.com/jedi-knights/go-semantic-release/internal/adapters/plugins"
 	"github.com/jedi-knights/go-semantic-release/internal/app"
 	"github.com/jedi-knights/go-semantic-release/internal/domain"
 	"github.com/jedi-knights/go-semantic-release/internal/platform"
@@ -13,20 +14,20 @@ import (
 
 // Container is the dependency injection container that wires all components.
 type Container struct {
-	config domain.Config
-	logger ports.Logger
+	config  domain.Config
+	logger  ports.Logger
 	workDir string
 
 	// Singletons (lazily initialized).
-	gitRepo       ports.GitRepository
-	commitParser  ports.CommitParser
-	fileSystem    ports.FileSystem
-	tagService    ports.TagService
-	versionCalc   ports.VersionCalculator
-	changelogGen  ports.ChangelogGenerator
-	publisher     ports.ReleasePublisher
+	gitRepo        ports.GitRepository
+	commitParser   ports.CommitParser
+	fileSystem     ports.FileSystem
+	tagService     ports.TagService
+	versionCalc    ports.VersionCalculator
+	changelogGen   ports.ChangelogGenerator
+	publisher      ports.ReleasePublisher
 	impactAnalyzer ports.ProjectImpactAnalyzer
-	discoverer    ports.ProjectDiscoverer
+	discoverer     ports.ProjectDiscoverer
 }
 
 // NewContainer creates a DI container with the given config.
@@ -123,20 +124,82 @@ func (c *Container) buildDiscoverer() ports.ProjectDiscoverer {
 	fs := c.FileSystem()
 	var discoverers []ports.ProjectDiscoverer
 
-	// Config-defined projects take priority.
 	if len(c.config.Projects) > 0 {
 		discoverers = append(discoverers, adaptergit.NewConfiguredDiscoverer(c.config.Projects))
 	}
-
-	// Go workspace discovery.
 	discoverers = append(discoverers, adaptergit.NewWorkspaceDiscoverer(fs))
-
-	// Module discovery if enabled.
 	if c.config.DiscoverModules {
 		discoverers = append(discoverers, adaptergit.NewModuleDiscoverer(fs))
 	}
 
 	return adaptergit.NewCompositeDiscoverer(discoverers...)
+}
+
+// Plugins builds the ordered list of lifecycle plugins based on config.
+func (c *Container) Plugins() []ports.Plugin {
+	var ps []ports.Plugin
+
+	// Git plugin: verifyConditions + publish (tag + push).
+	ps = append(ps, plugins.NewGitPlugin(
+		c.GitRepository(),
+		c.TagService(),
+		c.FileSystem(),
+		c.logger,
+		c.config.GitAuthor,
+		nil,
+	))
+
+	// Commit analyzer plugin: analyzeCommits.
+	ps = append(ps, plugins.NewCommitAnalyzerPlugin(
+		c.CommitParser(),
+		c.config.CommitTypes,
+	))
+
+	// Release notes plugin: generateNotes.
+	ps = append(ps, plugins.NewReleaseNotesPlugin(
+		c.ChangelogGenerator(),
+		c.config.ChangelogSections,
+	))
+
+	// Prepare plugin: update CHANGELOG.md, VERSION files.
+	if c.config.Prepare.ChangelogFile != "" || c.config.Prepare.VersionFile != "" {
+		ps = append(ps, plugins.NewPreparePlugin(
+			c.FileSystem(),
+			c.logger,
+			plugins.PrepareConfig{
+				ChangelogFile:   c.config.Prepare.ChangelogFile,
+				VersionFile:     c.config.Prepare.VersionFile,
+				AdditionalFiles: c.config.Prepare.AdditionalFiles,
+			},
+		))
+	}
+
+	// GitHub plugin: verifyConditions + publish + addChannel + success + fail.
+	if c.config.GitHub.CreateRelease {
+		ps = append(ps, adaptergithub.NewPlugin(
+			adaptergithub.PluginConfig{
+				Owner:                  c.config.GitHub.Owner,
+				Repo:                   c.config.GitHub.Repo,
+				Token:                  c.config.GitHub.Token,
+				APIURL:                 c.config.GitHub.APIURL,
+				Assets:                 c.config.GitHub.Assets,
+				DraftRelease:           c.config.GitHub.DraftRelease,
+				DiscussionCategoryName: c.config.GitHub.DiscussionCategoryName,
+				SuccessComment:         c.config.GitHub.SuccessComment,
+				FailComment:            c.config.GitHub.FailComment,
+				ReleasedLabels:         c.config.GitHub.ReleasedLabels,
+				FailLabels:             c.config.GitHub.FailLabels,
+			},
+			c.logger,
+		))
+	}
+
+	return ps
+}
+
+// Pipeline creates a lifecycle pipeline with all configured plugins.
+func (c *Container) Pipeline() *app.Pipeline {
+	return app.NewPipeline(c.Plugins(), c.logger)
 }
 
 // CommitAnalyzer creates a CommitAnalyzer use case.
