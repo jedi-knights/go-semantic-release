@@ -1,5 +1,5 @@
 # semantic-release configuration
-# See README.md for full documentation
+# See README.md for full documentation of all options
 
 release_mode: repo
 tag_format: "v{{.Version}}"
