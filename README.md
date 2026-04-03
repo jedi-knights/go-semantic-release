@@ -329,6 +329,11 @@ internal/di/             # DI container wiring
 - [x] Commit message linting
 - [x] Interactive mode for release confirmation
 
+## References
+
+- [Conventional Commits](https://www.conventionalcommits.org/) — the commit message specification used to determine release types
+- [Semantic Versioning](https://semver.org/) — the versioning scheme used for releases
+
 ## License
 
 MIT
