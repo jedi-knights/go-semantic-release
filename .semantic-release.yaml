@@ -38,7 +38,12 @@ branches:
 #     path: pkg/shared
 #     tag_prefix: "shared/"
 
+prepare:
+  changelog_file: CHANGELOG.md
+  version_file: VERSION
+
 github:
   create_release: true
-  # owner and repo are auto-detected from git remote
-  # token is read from SEMANTIC_RELEASE_GITHUB_TOKEN env var
+  owner: jedi-knights
+  repo: go-semantic-release
+  # token is read from GH_TOKEN, GITHUB_TOKEN, or SEMANTIC_RELEASE_GITHUB_TOKEN

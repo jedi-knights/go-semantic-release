@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    # Skip release commits pushed by this workflow.
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build semantic-release
+        run: go build -o bin/semantic-release ./cmd/semantic-release
+
+      - name: Configure git identity
+        run: |
+          git config user.name "semantic-release-bot"
+          git config user.email "semantic-release-bot@users.noreply.github.com"
+
+      - name: Run semantic-release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./bin/semantic-release --ci --no-interactive
+
+      - name: Commit release artifacts
+        run: |
+          if git diff --quiet CHANGELOG.md VERSION 2>/dev/null; then
+            echo "No release artifacts to commit."
+            exit 0
+          fi
+          git add CHANGELOG.md VERSION
+          git commit -m "chore(release): update CHANGELOG.md and VERSION [skip ci]"
+          git push
