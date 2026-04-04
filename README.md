@@ -87,6 +87,8 @@ semantic-release [options]
 | `--config` | Path to config file (default: `.semantic-release.yaml`) |
 | `--project` | Target a specific project in a monorepo |
 | `--json` | Output in JSON format |
+| `--interactive` | Prompt for confirmation before releasing |
+| `--no-interactive` | Disable interactive prompts (always proceed without confirmation) |
 
 ### Extension Subcommands
 
@@ -99,6 +101,7 @@ These are additional commands beyond the original semantic-release:
 | `semantic-release changelog` | Generate release notes |
 | `semantic-release detect-projects` | List discovered projects |
 | `semantic-release verify` | Check release prerequisites |
+| `semantic-release lint` | Lint recent commit messages against conventional commit rules |
 | `semantic-release config init` | Create a default config file |
 
 ## Configuration
