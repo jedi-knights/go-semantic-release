@@ -18,8 +18,12 @@ type ReleaseExecutor struct {
 	sections   []domain.ChangelogSectionConfig
 }
 
-// NewReleaseExecutor creates a release executor.
-func NewReleaseExecutor(
+// MustNewReleaseExecutor creates a release executor.
+// All parameters are required and must be non-nil. For publisher, pass a
+// noopPublisher (available from the DI container via di.Container.ReleasePublisher)
+// when publishing is disabled rather than passing nil.
+// Panics on any nil argument — these are programming errors, not runtime errors.
+func MustNewReleaseExecutor(
 	git ports.GitRepository,
 	tagService ports.TagService,
 	changelog ports.ChangelogGenerator,
@@ -27,6 +31,21 @@ func NewReleaseExecutor(
 	logger ports.Logger,
 	sections []domain.ChangelogSectionConfig,
 ) *ReleaseExecutor {
+	if git == nil {
+		panic("MustNewReleaseExecutor: git must not be nil")
+	}
+	if tagService == nil {
+		panic("MustNewReleaseExecutor: tagService must not be nil")
+	}
+	if changelog == nil {
+		panic("MustNewReleaseExecutor: changelog must not be nil")
+	}
+	if publisher == nil {
+		panic("MustNewReleaseExecutor: publisher must not be nil; use noopPublisher for no-op behavior")
+	}
+	if logger == nil {
+		panic("MustNewReleaseExecutor: logger must not be nil")
+	}
 	return &ReleaseExecutor{
 		git:        git,
 		tagService: tagService,
@@ -38,15 +57,37 @@ func NewReleaseExecutor(
 }
 
 // Execute runs the release for all releasable projects in the plan.
+//
+// Error model:
+//   - Context cancellation and tag/push failures are returned directly and abort
+//     the loop immediately. These are hard failures: git state may be partially
+//     mutated (e.g. a local tag exists without a corresponding push), so continuing
+//     to the next project would compound the inconsistency.
+//   - Publish failures (e.g. GitHub release creation) are soft: the tag is already
+//     pushed, so the release is technically done. These are collected into
+//     result.Projects[i].Error so the caller can report all failures before exiting.
+//
+// Use result.HasErrors() to check whether any per-project publish error occurred.
 func (e *ReleaseExecutor) Execute(ctx context.Context, plan *domain.ReleasePlan) (*domain.ReleaseResult, error) {
 	result := &domain.ReleaseResult{DryRun: plan.DryRun}
 
 	releasable := plan.ReleasableProjects()
 	for i := range releasable {
+		// Cancellation is checked between projects, not during an in-progress
+		// executeProject call. If createAndPushTag is blocked on a slow network
+		// operation the context is not respected until the current project finishes.
+		// This is intentional: aborting mid-tag would leave git state inconsistent.
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("release cancelled: %w", err)
+		}
 		pr, err := e.executeProject(ctx, releasable[i], plan)
 		if err != nil {
-			pr.Error = err
-			e.logger.Error("release failed", "project", releasable[i].Project.Name, "error", err)
+			// Hard failure (tag/push): abort immediately rather than continuing to
+			// create more tags in an inconsistent state.
+			return nil, fmt.Errorf("tagging %s: %w", releasable[i].Project.Name, err)
+		}
+		if pr.Error != nil {
+			e.logger.Error("publish failed", "project", pr.Project.Name, "error", pr.Error)
 		}
 		result.Projects = append(result.Projects, pr)
 	}
@@ -60,8 +101,9 @@ func (e *ReleaseExecutor) executeProject(
 	plan *domain.ReleasePlan,
 ) (domain.ProjectReleaseResult, error) {
 	result := domain.ProjectReleaseResult{
-		Project: pp.Project,
-		Version: pp.NextVersion,
+		Project:        pp.Project,
+		CurrentVersion: pp.CurrentVersion,
+		Version:        pp.NextVersion,
 	}
 
 	// Generate changelog.
@@ -91,17 +133,24 @@ func (e *ReleaseExecutor) executeProject(
 	}
 	result.TagCreated = true
 
-	// Publish release.
-	if e.publisher != nil {
-		publishResult, err := e.publish(ctx, pp, tagName, notes, plan.Policy)
-		if err != nil {
-			return result, err
-		}
-		result.Published = publishResult.Published
-		result.PublishURL = publishResult.PublishURL
+	// Publish release. Publish failures are soft: the tag is already pushed so
+	// the release is technically done. Store the error in result rather than
+	// returning it so the caller can continue with remaining projects.
+	published, publishURL, publishErr := e.publish(ctx, pp, tagName, notes, plan.Policy)
+	if publishErr != nil {
+		result.SetError(publishErr)
+	} else {
+		result.Published = published
+		result.PublishURL = publishURL
 	}
 
-	e.logger.Info("release completed", "project", pp.Project.Name, "version", pp.NextVersion, "tag", tagName)
+	// Log at different levels so operators can distinguish a full success from
+	// a partial one (tag pushed, publish failed) without parsing the error.
+	if result.Error == nil {
+		e.logger.Info("release completed", "project", pp.Project.Name, "version", pp.NextVersion, "tag", tagName)
+	} else {
+		e.logger.Warn("release partially completed (publish failed)", "project", pp.Project.Name, "version", pp.NextVersion, "tag", tagName, "error", result.Error)
+	}
 	return result, nil
 }
 
@@ -121,15 +170,18 @@ func (e *ReleaseExecutor) createAndPushTag(ctx context.Context, tagName, message
 	return nil
 }
 
+// publish calls the publisher and returns (published, publishURL, err).
+// Returning only the two fields callers actually use avoids implying that the
+// other ProjectReleaseResult zero-value fields (TagCreated, Project, …) are meaningful.
 func (e *ReleaseExecutor) publish(
 	ctx context.Context,
 	pp domain.ProjectReleasePlan,
 	tagName, notes string,
 	policy *domain.BranchPolicy,
-) (domain.ProjectReleaseResult, error) {
+) (bool, string, error) {
 	isPrerelease := policy != nil && policy.Prerelease
 
-	publishResult, err := e.publisher.Publish(ctx, ports.PublishParams{
+	result, err := e.publisher.Publish(ctx, ports.PublishParams{
 		TagName:    tagName,
 		Version:    pp.NextVersion,
 		Project:    pp.Project.Name,
@@ -137,8 +189,7 @@ func (e *ReleaseExecutor) publish(
 		Prerelease: isPrerelease,
 	})
 	if err != nil {
-		return publishResult, domain.NewReleaseError("publish",
-			fmt.Errorf("publishing %s: %w", pp.Project.Name, err))
+		return false, "", domain.NewReleaseError("publish", err)
 	}
-	return publishResult, nil
+	return result.Published, result.PublishURL, nil
 }

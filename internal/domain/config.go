@@ -1,5 +1,7 @@
 package domain
 
+import "slices"
+
 // Config holds all configuration for the release process.
 type Config struct {
 	// Core settings.
@@ -45,7 +47,7 @@ type Config struct {
 	// Commit linting.
 	Lint LintConfig `mapstructure:"lint"`
 
-	// Interactive mode.
+	// Interactive mode. nil means unset (treated as false by IsInteractive).
 	Interactive *bool `mapstructure:"interactive"`
 
 	// Git backend: "cli" (default) or "go-git".
@@ -60,7 +62,8 @@ type Config struct {
 
 // GitLabConfig holds GitLab-specific settings.
 type GitLabConfig struct {
-	ProjectID     string   `mapstructure:"project_id"`
+	ProjectID string `mapstructure:"project_id"`
+	// Token is the GitLab personal access token. SENSITIVE: do not log this field.
 	Token         string   `mapstructure:"token"`
 	APIURL        string   `mapstructure:"api_url"`
 	CreateRelease bool     `mapstructure:"create_release"`
@@ -70,8 +73,9 @@ type GitLabConfig struct {
 
 // BitbucketConfig holds Bitbucket-specific settings.
 type BitbucketConfig struct {
-	Workspace     string `mapstructure:"workspace"`
-	RepoSlug      string `mapstructure:"repo_slug"`
+	Workspace string `mapstructure:"workspace"`
+	RepoSlug  string `mapstructure:"repo_slug"`
+	// Token is the Bitbucket access token. SENSITIVE: do not log this field.
 	Token         string `mapstructure:"token"`
 	APIURL        string `mapstructure:"api_url"`
 	CreateRelease bool   `mapstructure:"create_release"`
@@ -86,16 +90,18 @@ type PrepareConfig struct {
 
 // ProjectConfig defines a project in the configuration file.
 type ProjectConfig struct {
-	Name         string   `mapstructure:"name"`
-	Path         string   `mapstructure:"path"`
-	TagPrefix    string   `mapstructure:"tag_prefix"`
-	Dependencies []string `mapstructure:"dependencies"`
+	Name          string   `mapstructure:"name"`
+	Path          string   `mapstructure:"path"`
+	TagPrefix     string   `mapstructure:"tag_prefix"`
+	Dependencies  []string `mapstructure:"dependencies"`
+	ChangelogFile string   `mapstructure:"changelog_file"` // per-project changelog filename, relative to the project's path
 }
 
 // GitHubConfig holds GitHub-specific settings.
 type GitHubConfig struct {
-	Owner                  string   `mapstructure:"owner"`
-	Repo                   string   `mapstructure:"repo"`
+	Owner string `mapstructure:"owner"`
+	Repo  string `mapstructure:"repo"`
+	// Token is the GitHub personal access token. SENSITIVE: do not log this field.
 	Token                  string   `mapstructure:"token"`
 	APIURL                 string   `mapstructure:"api_url"`
 	CreateRelease          bool     `mapstructure:"create_release"`
@@ -106,6 +112,19 @@ type GitHubConfig struct {
 	ReleasedLabels         []string `mapstructure:"released_labels"`
 	FailLabels             []string `mapstructure:"fail_labels"`
 	DiscussionCategoryName string   `mapstructure:"discussion_category_name"`
+}
+
+// AnyProjectDefinesChangelog reports whether any configured project has a per-project changelog_file set.
+func (c Config) AnyProjectDefinesChangelog() bool {
+	return slices.ContainsFunc(c.Projects, func(p ProjectConfig) bool {
+		return p.ChangelogFile != ""
+	})
+}
+
+// IsInteractive returns whether interactive mode is enabled.
+// Defaults to false when the Interactive field has not been set.
+func (c Config) IsInteractive() bool {
+	return c.Interactive != nil && *c.Interactive
 }
 
 // DefaultConfig returns sensible default configuration.
@@ -121,8 +140,10 @@ func DefaultConfig() Config {
 		ChangelogSections:     DefaultChangelogSections(),
 		DiscoverModules:       false,
 		DependencyPropagation: false,
+		Lint:                  DefaultLintConfig(),
 		GitAuthor:             DefaultGitIdentity(),
 		GitCommitter:          DefaultGitIdentity(),
+		GitBackend:            "cli",
 		GitHub: GitHubConfig{
 			CreateRelease: true,
 		},

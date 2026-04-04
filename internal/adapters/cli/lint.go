@@ -1,9 +1,7 @@
 package cli
 
 import (
-	"context"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 
@@ -11,19 +9,21 @@ import (
 	"github.com/jedi-knights/go-semantic-release/internal/domain"
 )
 
-func newLintCmd() *cobra.Command {
+func newLintCmd(opts *rootOptions) *cobra.Command {
 	return &cobra.Command{
 		Use:   "lint",
 		Short: "Lint commit messages against conventional commit rules",
 		Long:  `Validate that recent commit messages follow the conventional commits specification and configured rules.`,
-		RunE:  runLint,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runLint(cmd, args, opts)
+		},
 	}
 }
 
-func runLint(cmd *cobra.Command, _ []string) error {
-	ctx := context.Background()
+func runLint(cmd *cobra.Command, _ []string, opts *rootOptions) error {
+	ctx := cmd.Context()
 
-	container, err := buildContainer()
+	container, _, err := buildContainerWithWorkDir(opts)
 	if err != nil {
 		return err
 	}
@@ -36,17 +36,17 @@ func runLint(cmd *cobra.Command, _ []string) error {
 
 	commits, err := container.CommitAnalyzer().Analyze(ctx, "")
 	if err != nil {
-		return err
+		return fmt.Errorf("analyzing commits: %w", err)
 	}
 
 	if len(commits) == 0 {
-		fmt.Println("No commits to lint.")
+		fmt.Fprintln(cmd.OutOrStdout(), "No commits to lint.")
 		return nil
 	}
 
 	linter := lint.NewConventionalLinter(lintCfg)
-	hasErrors := false
 	totalViolations := 0
+	hasErrors := false
 
 	for i := range commits {
 		violations := linter.Lint(commits[i])
@@ -58,27 +58,31 @@ func runLint(cmd *cobra.Command, _ []string) error {
 		if len(hash) > 7 {
 			hash = hash[:7]
 		}
-		fmt.Printf("%s %s\n", hash, commits[i].Message)
+		// Per-commit violation details go to stderr so they do not pollute
+		// piped output. The clean-pass summary below goes to stdout.
+		fmt.Fprintf(cmd.ErrOrStderr(), "%s %s\n", hash, commits[i].Message)
 		for _, v := range violations {
-			icon := "⚠"
+			totalViolations++
+			icon := "[WARN]"
 			if v.Severity == domain.LintError {
-				icon = "✗"
+				icon = "[ERROR]"
 				hasErrors = true
 			}
-			fmt.Printf("  %s %s: %s\n", icon, v.Rule, v.Message)
-			totalViolations++
+			fmt.Fprintf(cmd.ErrOrStderr(), "  %s %s: %s\n", icon, v.Rule, v.Message)
 		}
-		fmt.Println()
+		fmt.Fprintln(cmd.ErrOrStderr())
 	}
 
 	if totalViolations == 0 {
-		fmt.Printf("All %d commit(s) pass lint checks.\n", len(commits))
+		fmt.Fprintf(cmd.OutOrStdout(), "All %d commit(s) pass lint checks.\n", len(commits))
 		return nil
 	}
 
-	fmt.Printf("Found %d violation(s) in %d commit(s).\n", totalViolations, len(commits))
+	fmt.Fprintf(cmd.ErrOrStderr(), "Found %d violation(s) in %d commit(s).\n", totalViolations, len(commits))
 	if hasErrors {
-		os.Exit(1)
+		// Violations already printed above; return ErrQuietExit so main exits
+		// with code 1 without printing a redundant error message.
+		return ErrQuietExit
 	}
 	return nil
 }

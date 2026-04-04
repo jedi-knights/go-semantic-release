@@ -31,6 +31,6 @@ func runConfigInit(cmd *cobra.Command, _ []string) error {
 	if err := adapterconfig.WriteDefaultConfig(path); err != nil {
 		return fmt.Errorf("writing config: %w", err)
 	}
-	fmt.Printf("Created %s with default configuration.\n", path)
+	fmt.Fprintf(cmd.OutOrStdout(), "Created %s with default configuration.\n", path)
 	return nil
 }

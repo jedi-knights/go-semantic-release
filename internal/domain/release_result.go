@@ -8,16 +8,21 @@ type ReleaseResult struct {
 
 // ProjectReleaseResult captures the outcome for a single project release.
 type ProjectReleaseResult struct {
-	Project    Project
-	Version    Version
-	TagName    string
-	TagCreated bool
-	Published  bool
-	PublishURL string // e.g. GitHub release URL
-	Changelog  string // rendered changelog content
-	Error      error
-	Skipped    bool
-	SkipReason string
+	Project        Project
+	CurrentVersion Version // version before this release
+	Version        Version // next (released) version
+	TagName        string
+	TagCreated     bool
+	Published      bool
+	PublishURL     string // e.g. GitHub release URL
+	Changelog      string // rendered changelog content
+	// Error holds the per-project failure. It is excluded from JSON serialization
+	// because encoding/json cannot marshal arbitrary error interfaces. Use
+	// ErrorMessage for JSON output.
+	Error        error  `json:"-"`
+	ErrorMessage string `json:"error,omitempty"` // human-readable form of Error for JSON consumers
+	Skipped      bool
+	SkipReason   string
 }
 
 // HasErrors returns true if any project release encountered an error.
@@ -30,13 +35,15 @@ func (rr ReleaseResult) HasErrors() bool {
 	return false
 }
 
-// Errors returns all project results that have errors.
-func (rr ReleaseResult) Errors() []ProjectReleaseResult {
-	var errs []ProjectReleaseResult
-	for i := range rr.Projects {
-		if rr.Projects[i].Error != nil {
-			errs = append(errs, rr.Projects[i])
-		}
+// SetError sets both the Error and ErrorMessage fields atomically, keeping
+// them consistent. Use this instead of assigning the fields individually to
+// prevent them from diverging.
+func (pr *ProjectReleaseResult) SetError(err error) {
+	pr.Error = err
+	if err != nil {
+		pr.ErrorMessage = err.Error()
+	} else {
+		pr.ErrorMessage = ""
 	}
-	return errs
 }
+

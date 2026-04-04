@@ -1,5 +1,8 @@
 # semantic-release
 
+[![CI](https://github.com/jedi-knights/go-semantic-release/actions/workflows/ci.yml/badge.svg)](https://github.com/jedi-knights/go-semantic-release/actions/workflows/ci.yml)
+[![Release](https://github.com/jedi-knights/go-semantic-release/actions/workflows/release.yml/badge.svg)](https://github.com/jedi-knights/go-semantic-release/actions/workflows/release.yml)
+
 A production-grade semantic release utility written in native Go. Analyzes conventional commits, determines the next semantic version, generates changelogs, creates tags, and publishes GitHub releases.
 
 Supports monorepos with independent project versioning, including Go workspaces and multi-module repositories.

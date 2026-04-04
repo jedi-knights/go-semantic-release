@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -9,52 +8,60 @@ import (
 	"github.com/jedi-knights/go-semantic-release/internal/domain"
 )
 
-func newVersionCmd() *cobra.Command {
+func newVersionCmd(opts *rootOptions) *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
 		Short: "Show the current and next version",
-		RunE:  runVersion,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runVersion(cmd, args, opts)
+		},
 	}
 }
 
-func runVersion(cmd *cobra.Command, _ []string) error {
-	ctx := context.Background()
+func runVersion(cmd *cobra.Command, _ []string, opts *rootOptions) error {
+	ctx := cmd.Context()
 
-	container, err := buildContainer()
+	container, workDir, err := buildContainerWithWorkDir(opts)
 	if err != nil {
 		return err
 	}
 
 	cfg := container.Config()
 
-	projects, err := container.ProjectDetector().Detect(ctx, getWorkDir())
+	projects, err := container.ProjectDetector().Detect(ctx, workDir)
 	if err != nil {
-		return err
+		return fmt.Errorf("detecting projects: %w", err)
 	}
 
-	if project != "" {
-		projects = filterProject(projects, project)
+	if opts.project != "" {
+		projects = filterProject(projects, opts.project)
+		if len(projects) == 0 {
+			return fmt.Errorf("project %q not found", opts.project)
+		}
 	}
 
 	commits, err := container.CommitAnalyzer().Analyze(ctx, "")
 	if err != nil {
-		return err
+		return fmt.Errorf("analyzing commits: %w", err)
 	}
 
-	branch, _ := container.GitRepository().CurrentBranch(ctx)
+	branch, err := container.GitRepository().CurrentBranch(ctx)
+	if err != nil {
+		return fmt.Errorf("resolving current branch: %w", err)
+	}
 	policy := domain.FindBranchPolicy(cfg.Branches, branch)
 
 	plan, err := container.ReleasePlanner().Plan(ctx, projects, commits, cfg.ReleaseMode, policy, true)
 	if err != nil {
-		return err
+		return fmt.Errorf("planning release: %w", err)
 	}
 
 	for i := range plan.Projects {
 		name := displayProjectName(plan.Projects[i].Project)
 		if plan.Projects[i].ShouldRelease {
-			fmt.Printf("%s: %s → %s\n", name, plan.Projects[i].CurrentVersion, plan.Projects[i].NextVersion)
+			fmt.Fprintf(cmd.OutOrStdout(), "%s: %s → %s\n", name, plan.Projects[i].CurrentVersion, plan.Projects[i].NextVersion)
 		} else {
-			fmt.Printf("%s: %s (no change)\n", name, plan.Projects[i].CurrentVersion)
+			fmt.Fprintf(cmd.OutOrStdout(), "%s: %s (no change)\n", name, plan.Projects[i].CurrentVersion)
 		}
 	}
 	return nil

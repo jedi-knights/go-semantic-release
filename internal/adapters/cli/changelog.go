@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -9,46 +8,55 @@ import (
 	"github.com/jedi-knights/go-semantic-release/internal/domain"
 )
 
-func newChangelogCmd() *cobra.Command {
+func newChangelogCmd(opts *rootOptions) *cobra.Command {
 	return &cobra.Command{
 		Use:   "changelog",
 		Short: "Generate changelog for the next release",
-		RunE:  runChangelog,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runChangelog(cmd, args, opts)
+		},
 	}
 }
 
-func runChangelog(cmd *cobra.Command, _ []string) error {
-	ctx := context.Background()
+func runChangelog(cmd *cobra.Command, _ []string, opts *rootOptions) error {
+	ctx := cmd.Context()
 
-	container, err := buildContainer()
+	container, workDir, err := buildContainerWithWorkDir(opts)
 	if err != nil {
 		return err
 	}
 
 	cfg := container.Config()
 
-	projects, err := container.ProjectDetector().Detect(ctx, getWorkDir())
+	projects, err := container.ProjectDetector().Detect(ctx, workDir)
 	if err != nil {
-		return err
+		return fmt.Errorf("detecting projects: %w", err)
 	}
 
-	if project != "" {
-		projects = filterProject(projects, project)
+	if opts.project != "" {
+		projects = filterProject(projects, opts.project)
+		if len(projects) == 0 {
+			return fmt.Errorf("project %q not found", opts.project)
+		}
 	}
 
 	commits, err := container.CommitAnalyzer().Analyze(ctx, "")
 	if err != nil {
-		return err
+		return fmt.Errorf("analyzing commits: %w", err)
 	}
 
-	branch, _ := container.GitRepository().CurrentBranch(ctx)
+	branch, err := container.GitRepository().CurrentBranch(ctx)
+	if err != nil {
+		return fmt.Errorf("resolving current branch: %w", err)
+	}
 	policy := domain.FindBranchPolicy(cfg.Branches, branch)
 
 	plan, err := container.ReleasePlanner().Plan(ctx, projects, commits, cfg.ReleaseMode, policy, true)
 	if err != nil {
-		return err
+		return fmt.Errorf("planning release: %w", err)
 	}
 
+	out := cmd.OutOrStdout()
 	gen := container.ChangelogGenerator()
 	releasable := plan.ReleasableProjects()
 	for i := range releasable {
@@ -56,12 +64,12 @@ func runChangelog(cmd *cobra.Command, _ []string) error {
 		if err != nil {
 			return fmt.Errorf("generating changelog for %s: %w", releasable[i].Project.Name, err)
 		}
-		fmt.Println(notes)
-		fmt.Println()
+		fmt.Fprintln(out, notes)
+		fmt.Fprintln(out)
 	}
 
 	if !plan.HasReleasableProjects() {
-		fmt.Println("No releasable changes found.")
+		fmt.Fprintln(out, "No releasable changes found.")
 	}
 
 	return nil

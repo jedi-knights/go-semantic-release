@@ -19,52 +19,41 @@ var (
 
 // PreparePlugin updates files (CHANGELOG.md, VERSION) before the release is published.
 type PreparePlugin struct {
-	fs              ports.FileSystem
-	logger          ports.Logger
-	changelogFile   string // path to CHANGELOG.md, empty to skip
-	versionFile     string // path to VERSION file, empty to skip
-	additionalFiles []string
-}
-
-// PrepareConfig holds configuration for the prepare plugin.
-type PrepareConfig struct {
-	ChangelogFile   string   `mapstructure:"changelog_file"`
-	VersionFile     string   `mapstructure:"version_file"`
-	AdditionalFiles []string `mapstructure:"additional_files"`
+	fs            ports.FileSystem
+	logger        ports.Logger
+	changelogFile string // global changelog path relative to repo root, empty to skip
+	versionFile   string // path to VERSION file, empty to skip
 }
 
 // NewPreparePlugin creates a plugin that updates release files.
-func NewPreparePlugin(fs ports.FileSystem, logger ports.Logger, cfg PrepareConfig) *PreparePlugin {
+func NewPreparePlugin(fs ports.FileSystem, logger ports.Logger, cfg domain.PrepareConfig) *PreparePlugin {
 	return &PreparePlugin{
-		fs:              fs,
-		logger:          logger,
-		changelogFile:   cfg.ChangelogFile,
-		versionFile:     cfg.VersionFile,
-		additionalFiles: cfg.AdditionalFiles,
+		fs:            fs,
+		logger:        logger,
+		changelogFile: cfg.ChangelogFile,
+		versionFile:   cfg.VersionFile,
 	}
 }
 
 func (p *PreparePlugin) Name() string { return "prepare-files" }
 
-func (p *PreparePlugin) Prepare(_ context.Context, rc *domain.ReleaseContext) error {
+func (p *PreparePlugin) Prepare(ctx context.Context, rc *domain.ReleaseContext) error {
 	if rc.CurrentProject == nil {
 		return nil
 	}
 
 	version := rc.CurrentProject.NextVersion
 
-	if err := p.updateVersionFile(version, rc.RepositoryRoot); err != nil {
+	if err := p.updateVersionFile(ctx, version, rc.RepositoryRoot); err != nil {
 		return err
 	}
 
-	if err := p.updateChangelog(rc); err != nil {
-		return err
-	}
-
-	return nil
+	return p.updateChangelog(ctx, rc)
 }
 
-func (p *PreparePlugin) updateVersionFile(version domain.Version, repoRoot string) error {
+// updateVersionFile writes the version string to the configured VERSION file.
+// ctx is accepted for forward-compatibility; ports.FileSystem does not yet support cancellation.
+func (p *PreparePlugin) updateVersionFile(_ context.Context, version domain.Version, repoRoot string) error {
 	if p.versionFile == "" {
 		return nil
 	}
@@ -79,14 +68,63 @@ func (p *PreparePlugin) updateVersionFile(version domain.Version, repoRoot strin
 	return nil
 }
 
-func (p *PreparePlugin) updateChangelog(rc *domain.ReleaseContext) error {
+// changelogPath returns the resolved absolute path for the changelog file, or empty string if not configured.
+// A per-project changelog_file takes precedence and is resolved relative to the project's path inside the repo.
+// The global changelog_file falls back and is resolved relative to the repository root.
+// Safe to call with a nil rc.CurrentProject: falls through to the global path in that case.
+func (p *PreparePlugin) changelogPath(rc *domain.ReleaseContext) string {
+	if rc.CurrentProject != nil && rc.CurrentProject.Project.ChangelogFile != "" {
+		return filepath.Join(rc.RepositoryRoot, rc.CurrentProject.Project.Path, rc.CurrentProject.Project.ChangelogFile)
+	}
 	if p.changelogFile == "" {
+		return ""
+	}
+	return filepath.Join(rc.RepositoryRoot, p.changelogFile)
+}
+
+// updateChangelog prepends the generated release notes into the changelog file.
+// ctx is accepted for forward-compatibility; ports.FileSystem does not yet support cancellation.
+func (p *PreparePlugin) updateChangelog(_ context.Context, rc *domain.ReleaseContext) error {
+	// Require an absolute RepositoryRoot so the traversal guard below is reliable.
+	// A relative root (e.g. ".") would make filepath.Clean produce a relative prefix,
+	// causing valid absolute changelog paths to fail the HasPrefix check.
+	if !filepath.IsAbs(rc.RepositoryRoot) {
+		return fmt.Errorf("RepositoryRoot must be an absolute path, got: %q", rc.RepositoryRoot)
+	}
+
+	// Resolve the raw path first; empty means no changelog is configured.
+	raw := p.changelogPath(rc)
+	if raw == "" {
+		return nil
+	}
+	// Explicitly clean the path so the traversal guard holds regardless of how
+	// changelogPath constructs the string in the future.
+	path := filepath.Clean(raw)
+	if path == "." {
 		return nil
 	}
 
-	path := filepath.Join(rc.RepositoryRoot, p.changelogFile)
-	newEntry := rc.Notes
+	// Guard against user-supplied changelog_file values that escape the repository root
+	// via path traversal (e.g. "../../etc/passwd"). The separator suffix is required so
+	// that a root of "/repo" does not accidentally allow "/repo-sibling/evil".
+	root := filepath.Clean(rc.RepositoryRoot)
+	if !strings.HasPrefix(path, root+string(filepath.Separator)) {
+		return fmt.Errorf("changelog_file path escapes repository root: %s", path)
+	}
 
+	newEntry := rc.Notes
+	if newEntry == "" {
+		// Nothing to prepend — skip silently rather than writing a blank entry.
+		return nil
+	}
+
+	// TODO(ports/filesystem): replace Exists+ReadFile with a single ReadFile call
+	// that treats ErrNotExist as an empty file, once ports.FileSystem exposes
+	// that sentinel. There is a TOCTOU window between Exists returning false and
+	// the subsequent WriteFile: a concurrent process could create the file in
+	// between. This is acceptable in practice because CI environments run one
+	// release process at a time, but the single-call approach would close the
+	// window entirely.
 	existing := ""
 	if p.fs.Exists(path) {
 		data, err := p.fs.ReadFile(path)
@@ -118,6 +156,8 @@ func prependChangelog(existing, newEntry string) string {
 		if len(lines) > 1 {
 			rest = lines[1]
 		}
+		// TrimLeft removes any leading newlines from the remainder so that repeated
+		// prepend operations do not accumulate blank lines between entries.
 		return lines[0] + "\n\n" + newEntry + "\n\n" + strings.TrimLeft(rest, "\n")
 	}
 

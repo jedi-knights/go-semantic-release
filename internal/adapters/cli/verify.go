@@ -1,44 +1,45 @@
 package cli
 
 import (
-	"context"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 )
 
-func newVerifyCmd() *cobra.Command {
+func newVerifyCmd(opts *rootOptions) *cobra.Command {
 	return &cobra.Command{
 		Use:   "verify",
 		Short: "Verify release conditions are met",
 		Long:  `Check that all prerequisites for a release are satisfied (branch policy, GitHub config, etc.).`,
-		RunE:  runVerify,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runVerify(cmd, args, opts)
+		},
 	}
 }
 
-func runVerify(cmd *cobra.Command, _ []string) error {
-	ctx := context.Background()
+func runVerify(cmd *cobra.Command, _ []string, opts *rootOptions) error {
+	ctx := cmd.Context()
 
-	container, err := buildContainer()
+	container, _, err := buildContainerWithWorkDir(opts)
 	if err != nil {
 		return err
 	}
 
 	result, err := container.ConditionVerifier().Verify(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("verifying conditions: %w", err)
 	}
 
 	if result.Passed {
-		fmt.Println("All release conditions verified.")
+		fmt.Fprintln(cmd.OutOrStdout(), "All release conditions verified.")
 		return nil
 	}
 
-	fmt.Fprintln(os.Stderr, "Release conditions not met:")
+	// Failures already printed to stderr; return ErrQuietExit so main exits
+	// with code 1 without printing a redundant error message.
+	fmt.Fprintln(cmd.ErrOrStderr(), "Release conditions not met:")
 	for _, f := range result.Failures {
-		fmt.Fprintf(os.Stderr, "  ✗ %s\n", f)
+		fmt.Fprintf(cmd.ErrOrStderr(), "  [FAIL] %s\n", f)
 	}
-	os.Exit(1)
-	return nil
+	return ErrQuietExit
 }
