@@ -2,6 +2,7 @@ package app_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"go.uber.org/mock/gomock"
@@ -13,6 +14,7 @@ import (
 )
 
 func TestReleaseExecutor_Execute_DryRun(t *testing.T) {
+	t.Parallel()
 	ctrl := gomock.NewController(t)
 
 	mockGit := mocks.NewMockGitRepository(ctrl)
@@ -32,7 +34,7 @@ func TestReleaseExecutor_Execute_DryRun(t *testing.T) {
 
 	// In dry-run mode, no git operations or publishing should happen.
 
-	executor := app.NewReleaseExecutor(mockGit, mockTag, mockChangelog, mockPublisher, mockLogger, sections)
+	executor := app.MustNewReleaseExecutor(mockGit, mockTag, mockChangelog, mockPublisher, mockLogger, sections)
 
 	plan := &domain.ReleasePlan{
 		DryRun: true,
@@ -66,6 +68,7 @@ func TestReleaseExecutor_Execute_DryRun(t *testing.T) {
 }
 
 func TestReleaseExecutor_Execute_FullRelease(t *testing.T) {
+	t.Parallel()
 	ctrl := gomock.NewController(t)
 
 	mockGit := mocks.NewMockGitRepository(ctrl)
@@ -97,7 +100,7 @@ func TestReleaseExecutor_Execute_FullRelease(t *testing.T) {
 		PublishURL: "https://github.com/org/repo/releases/tag/api/v2.0.0",
 	}, nil)
 
-	executor := app.NewReleaseExecutor(mockGit, mockTag, mockChangelog, mockPublisher, mockLogger, sections)
+	executor := app.MustNewReleaseExecutor(mockGit, mockTag, mockChangelog, mockPublisher, mockLogger, sections)
 
 	plan := &domain.ReleasePlan{
 		DryRun: false,
@@ -129,5 +132,70 @@ func TestReleaseExecutor_Execute_FullRelease(t *testing.T) {
 	}
 	if pr.PublishURL == "" {
 		t.Error("publish URL should be set")
+	}
+}
+
+func TestReleaseExecutor_Execute_PublishFailure(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+
+	mockGit := mocks.NewMockGitRepository(ctrl)
+	mockTag := mocks.NewMockTagService(ctrl)
+	mockChangelog := mocks.NewMockChangelogGenerator(ctrl)
+	mockPublisher := mocks.NewMockReleasePublisher(ctrl)
+	mockLogger := mocks.NewMockLogger(ctrl)
+	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any()).AnyTimes()
+	// Execute logs at Error level when a project's publish step fails.
+	mockLogger.EXPECT().Error(gomock.Any(), gomock.Any()).AnyTimes()
+
+	sections := domain.DefaultChangelogSections()
+
+	mockChangelog.EXPECT().Generate(
+		domain.NewVersion(1, 1, 0), "api", gomock.Any(), sections,
+	).Return("## 1.1.0", nil)
+
+	mockTag.EXPECT().FormatTag("api", domain.NewVersion(1, 1, 0)).Return("api/v1.1.0", nil)
+
+	mockGit.EXPECT().HeadHash(gomock.Any()).Return("cafebabe", nil)
+	mockGit.EXPECT().CreateTag(gomock.Any(), "api/v1.1.0", "cafebabe", gomock.Any()).Return(nil)
+	mockGit.EXPECT().PushTag(gomock.Any(), "api/v1.1.0").Return(nil)
+
+	// Publish fails — this is a soft error: the tag is already pushed.
+	mockPublisher.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(
+		domain.ProjectReleaseResult{}, errors.New("github api unavailable"),
+	)
+
+	executor := app.MustNewReleaseExecutor(mockGit, mockTag, mockChangelog, mockPublisher, mockLogger, sections)
+
+	plan := &domain.ReleasePlan{
+		DryRun: false,
+		Projects: []domain.ProjectReleasePlan{{
+			Project:        domain.Project{Name: "api", Path: "services/api"},
+			CurrentVersion: domain.NewVersion(1, 0, 0),
+			NextVersion:    domain.NewVersion(1, 1, 0),
+			ReleaseType:    domain.ReleaseMinor,
+			Commits:        []domain.Commit{{Type: "feat", Description: "add feature"}},
+			ShouldRelease:  true,
+		}},
+	}
+
+	// Execute must not return a hard error — publish failures are soft.
+	result, err := executor.Execute(context.Background(), plan)
+	if err != nil {
+		t.Fatalf("Execute() should not return hard error on publish failure, got: %v", err)
+	}
+	if len(result.Projects) != 1 {
+		t.Fatalf("expected 1 project result, got %d", len(result.Projects))
+	}
+	pr := result.Projects[0]
+	if pr.Error == nil {
+		t.Error("expected per-project error on publish failure, got nil")
+	}
+	if !result.HasErrors() {
+		t.Error("HasErrors() should return true when a project has a publish error")
+	}
+	if !pr.TagCreated {
+		t.Error("tag should still be marked as created despite publish failure")
 	}
 }

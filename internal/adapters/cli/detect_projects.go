@@ -1,52 +1,55 @@
 package cli
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 )
 
-func newDetectProjectsCmd() *cobra.Command {
+func newDetectProjectsCmd(opts *rootOptions) *cobra.Command {
 	return &cobra.Command{
 		Use:   "detect-projects",
 		Short: "Discover projects in the repository",
 		Long:  `Detect all projects/modules in the repository using configured discovery strategies.`,
-		RunE:  runDetectProjects,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runDetectProjects(cmd, args, opts)
+		},
 	}
 }
 
-func runDetectProjects(cmd *cobra.Command, _ []string) error {
-	ctx := context.Background()
+func runDetectProjects(cmd *cobra.Command, _ []string, opts *rootOptions) error {
+	ctx := cmd.Context()
 
-	container, err := buildContainer()
+	container, workDir, err := buildContainerWithWorkDir(opts)
 	if err != nil {
 		return err
 	}
 
-	projects, err := container.ProjectDetector().Detect(ctx, getWorkDir())
+	projects, err := container.ProjectDetector().Detect(ctx, workDir)
 	if err != nil {
-		return err
+		return fmt.Errorf("detecting projects: %w", err)
 	}
 
-	if jsonOut {
-		return json.NewEncoder(os.Stdout).Encode(projects)
+	if opts.jsonOut {
+		if err := json.NewEncoder(cmd.OutOrStdout()).Encode(projects); err != nil {
+			return fmt.Errorf("encoding projects as JSON: %w", err)
+		}
+		return nil
 	}
 
-	fmt.Printf("Discovered %d project(s):\n\n", len(projects))
+	fmt.Fprintf(cmd.OutOrStdout(), "Discovered %d project(s):\n\n", len(projects))
 	for _, p := range projects {
-		fmt.Printf("  %s\n", p.Name)
-		fmt.Printf("    Path:   %s\n", p.Path)
-		fmt.Printf("    Type:   %s\n", p.Type)
+		fmt.Fprintf(cmd.OutOrStdout(), "  %s\n", p.Name)
+		fmt.Fprintf(cmd.OutOrStdout(), "    Path:   %s\n", p.Path)
+		fmt.Fprintf(cmd.OutOrStdout(), "    Type:   %s\n", p.Type)
 		if p.ModulePath != "" {
-			fmt.Printf("    Module: %s\n", p.ModulePath)
+			fmt.Fprintf(cmd.OutOrStdout(), "    Module: %s\n", p.ModulePath)
 		}
 		if p.TagPrefix != "" {
-			fmt.Printf("    Tags:   %s*\n", p.TagPrefix)
+			fmt.Fprintf(cmd.OutOrStdout(), "    Tags:   %s*\n", p.TagPrefix)
 		}
-		fmt.Println()
+		fmt.Fprintln(cmd.OutOrStdout())
 	}
 	return nil
 }

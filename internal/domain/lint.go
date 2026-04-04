@@ -11,7 +11,7 @@ type LintConfig struct {
 	RequireDescription bool     `mapstructure:"require_description"`
 }
 
-// DefaultLintConfig returns sensible default lint configuration.
+// DefaultLintConfig returns sensible default lint configuration with linting disabled.
 func DefaultLintConfig() LintConfig {
 	return LintConfig{
 		Enabled:          false,
@@ -23,11 +23,21 @@ func DefaultLintConfig() LintConfig {
 	}
 }
 
+// DefaultEnabledLintConfig returns the default lint configuration with linting enabled.
+// Use this instead of DefaultLintConfig() when you need a ready-to-use linting setup.
+func DefaultEnabledLintConfig() LintConfig {
+	cfg := DefaultLintConfig()
+	cfg.Enabled = true
+	return cfg
+}
+
 // LintSeverity indicates the severity of a lint violation.
 type LintSeverity string
 
 const (
-	LintError   LintSeverity = "error"
+	// LintError indicates a violation that must be corrected before release.
+	LintError LintSeverity = "error"
+	// LintWarning indicates a violation that should be reviewed but does not block release.
 	LintWarning LintSeverity = "warning"
 )
 

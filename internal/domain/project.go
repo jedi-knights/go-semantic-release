@@ -14,10 +14,14 @@ const (
 type ProjectType string
 
 const (
+	// ProjectTypeGoWorkspace indicates the project was discovered via a go.work file.
 	ProjectTypeGoWorkspace ProjectType = "go-workspace"
-	ProjectTypeGoModule    ProjectType = "go-module"
-	ProjectTypeConfigured  ProjectType = "configured"
-	ProjectTypeRoot        ProjectType = "root"
+	// ProjectTypeGoModule indicates the project was discovered by finding a go.mod file.
+	ProjectTypeGoModule ProjectType = "go-module"
+	// ProjectTypeConfigured indicates the project was defined explicitly in the release config.
+	ProjectTypeConfigured ProjectType = "configured"
+	// ProjectTypeRoot indicates the project is at the repository root (no path prefix on tags).
+	ProjectTypeRoot ProjectType = "root"
 )
 
 // String returns the string representation of the release mode.
@@ -32,15 +36,20 @@ func (pt ProjectType) String() string {
 
 // Project represents a versioned unit within a repository.
 type Project struct {
-	Name         string
-	Path         string // relative path from repo root
-	Type         ProjectType
-	ModulePath   string   // Go module path if applicable
-	Dependencies []string // names of projects this depends on
-	TagPrefix    string   // e.g. "myproject/" for tags like "myproject/v1.2.3"
+	Name string
+	// Path is the relative path from the repository root (e.g. "services/auth-server").
+	// It should always be a relative path; IsRoot handles ".", "", and "/" defensively.
+	Path          string
+	Type          ProjectType
+	ModulePath    string   // Go module path if applicable
+	Dependencies  []string // names of projects this depends on
+	TagPrefix     string   // e.g. "myproject/" for tags like "myproject/v1.2.3"
+	ChangelogFile string   // per-project changelog filename, relative to the project's path; empty means use global
 }
 
 // IsRoot returns true if this project represents the repository root.
+// The "/" case is defensive — Path should always be a relative path ("." or ""),
+// but we guard against an absolute-path misuse rather than silently misbehaving.
 func (p Project) IsRoot() bool {
-	return p.Path == "." || p.Path == ""
+	return p.Path == "." || p.Path == "" || p.Path == "/"
 }
