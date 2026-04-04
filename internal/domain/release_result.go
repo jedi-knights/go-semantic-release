@@ -46,4 +46,3 @@ func (pr *ProjectReleaseResult) SetError(err error) {
 		pr.ErrorMessage = ""
 	}
 }
-

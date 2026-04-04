@@ -115,8 +115,8 @@ use (
 		},
 		{
 			// The go toolchain accepts a tab between "use" and the path.
-			name:         "go.work single use with tab separator",
-			goWorkExists: true,
+			name:          "go.work single use with tab separator",
+			goWorkExists:  true,
 			goWorkContent: "go 1.21\n\nuse\t./svc-api\n",
 			goModContents: map[string]string{
 				"/repo/svc-api/go.mod": "module github.com/org/repo/svc-api",
@@ -185,14 +185,14 @@ use (
 func TestModuleDiscoverer_Discover(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name        string
-		modFiles    []string // paths Walk will surface as go.mod files
-		modContents map[string]string
-		walkErr     error
-		readFileErr string // path whose ReadFile call returns an error; "" means no error
-		wantCount   int
+		name         string
+		modFiles     []string // paths Walk will surface as go.mod files
+		modContents  map[string]string
+		walkErr      error
+		readFileErr  string // path whose ReadFile call returns an error; "" means no error
+		wantCount    int
 		wantRootType domain.ProjectType
-		wantErr     bool
+		wantErr      bool
 	}{
 		{
 			name: "three modules including root",
@@ -202,8 +202,8 @@ func TestModuleDiscoverer_Discover(t *testing.T) {
 				"/repo/services/worker/go.mod",
 			},
 			modContents: map[string]string{
-				"/repo/go.mod":                "module github.com/org/repo",
-				"/repo/services/api/go.mod":   "module github.com/org/repo/services/api",
+				"/repo/go.mod":                 "module github.com/org/repo",
+				"/repo/services/api/go.mod":    "module github.com/org/repo/services/api",
 				"/repo/services/worker/go.mod": "module github.com/org/repo/services/worker",
 			},
 			wantCount:    3,
@@ -295,10 +295,10 @@ func TestModuleDiscoverer_Discover(t *testing.T) {
 func TestConfiguredDiscoverer_Discover(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name          string
-		configs       []domain.ProjectConfig
-		wantPaths     []string // expected Project.Path after filepath.Clean normalisation
-		wantPrefixes  []string // expected Project.TagPrefix
+		name         string
+		configs      []domain.ProjectConfig
+		wantPaths    []string // expected Project.Path after filepath.Clean normalisation
+		wantPrefixes []string // expected Project.TagPrefix
 	}{
 		{
 			// Explicit TagPrefix must be preserved verbatim.

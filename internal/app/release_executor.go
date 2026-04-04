@@ -178,7 +178,7 @@ func (e *ReleaseExecutor) publish(
 	pp domain.ProjectReleasePlan,
 	tagName, notes string,
 	policy *domain.BranchPolicy,
-) (bool, string, error) {
+) (published bool, publishURL string, err error) {
 	isPrerelease := policy != nil && policy.Prerelease
 
 	result, err := e.publisher.Publish(ctx, ports.PublishParams{

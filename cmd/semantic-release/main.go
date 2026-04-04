@@ -12,9 +12,14 @@ import (
 )
 
 func main() {
-	// Wire OS interrupt signals into the root context so long-running git and
-	// network calls respect Ctrl-C. Deferring stop() here guarantees the
-	// registration is always released, even when a command returns an error.
+	os.Exit(run())
+}
+
+// run executes the CLI and returns the exit code. Extracting the logic here
+// ensures defer stop() runs before os.Exit in main — os.Exit does not run
+// deferred functions, so placing it in main() directly would skip the signal
+// deregistration.
+func run() int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -24,6 +29,7 @@ func main() {
 		if !errors.Is(err, cli.ErrQuietExit) {
 			fmt.Fprintln(os.Stderr, err)
 		}
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
