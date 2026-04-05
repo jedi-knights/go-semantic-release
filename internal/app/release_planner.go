@@ -161,8 +161,8 @@ func buildReason(rt domain.ReleaseType, commitCount int) string {
 // Lower index means more recent; this is the natural order from git log.
 func buildCommitIndex(commits []domain.Commit) map[string]int {
 	idx := make(map[string]int, len(commits))
-	for i, c := range commits {
-		idx[c.Hash] = i
+	for i := range commits {
+		idx[commits[i].Hash] = i
 	}
 	return idx
 }
@@ -186,9 +186,9 @@ func commitsAfterHash(commits []domain.Commit, index map[string]int, sinceHash s
 		return commits
 	}
 	result := make([]domain.Commit, 0, cutoff)
-	for _, c := range commits {
-		if pos, exists := index[c.Hash]; exists && pos < cutoff {
-			result = append(result, c)
+	for i := range commits {
+		if pos, exists := index[commits[i].Hash]; exists && pos < cutoff {
+			result = append(result, commits[i])
 		}
 	}
 	return result
