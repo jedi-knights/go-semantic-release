@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.1 (2026-04-05)
+
+### Bug Fixes
+
+- **lint:** use index-based ranging to avoid 216-byte Commit copies (6c52cd6)
+- **planner:** scope commits to since-last-tag in independent and repo modes (cbc4551)
+
 ## 0.6.0 (2026-04-04)
 
 ### Features
