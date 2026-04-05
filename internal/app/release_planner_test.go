@@ -119,6 +119,69 @@ func TestReleasePlanner_Plan_IndependentMode(t *testing.T) {
 	}
 }
 
+// TestReleasePlanner_Plan_IndependentMode_DoesNotReanalyzeReleasedCommits verifies
+// that planIndependent only considers commits newer than each project's last release
+// tag. This guards against the regression where every push re-analyzed the full
+// commit history and produced unnecessary version bumps.
+func TestReleasePlanner_Plan_IndependentMode_DoesNotReanalyzeReleasedCommits(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	mockGit := mocks.NewMockGitRepository(ctrl)
+	mockTag := mocks.NewMockTagService(ctrl)
+	mockVersion := mocks.NewMockVersionCalculator(ctrl)
+	mockImpact := mocks.NewMockProjectImpactAnalyzer(ctrl)
+	mockLogger := mocks.NewMockLogger(ctrl)
+	mockLogger.EXPECT().Debug(gomock.Any(), gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
+
+	// Simulate: three commits in history (newest first).
+	//   newCommit  – docs: change README (non-releasable, touches no project path)
+	//   tagCommit  – the exact commit that was HEAD when api/v1.0.0 was created
+	//   oldFeat    – feat: initial api work (already counted in v1.0.0)
+	newCommit := domain.Commit{Hash: "new-sha", Type: "docs", FilesChanged: []string{"README.md"}}
+	tagCommit := domain.Commit{Hash: "tag-sha", Type: "chore", FilesChanged: []string{}}
+	oldFeat := domain.Commit{Hash: "old-sha", Type: "feat", FilesChanged: []string{"services/api/main.go"}}
+	commits := []domain.Commit{newCommit, tagCommit, oldFeat}
+
+	tags := []domain.Tag{{Name: "api/v1.0.0", Hash: "tag-sha"}}
+	mockGit.EXPECT().ListTags(gomock.Any()).Return(tags, nil)
+	mockGit.EXPECT().CurrentBranch(gomock.Any()).Return("main", nil)
+
+	// FindLatestTag returns the tag whose commit hash is "tag-sha" (v1.0.0).
+	apiTag := &domain.Tag{Name: "api/v1.0.0", Version: domain.NewVersion(1, 0, 0), Hash: "tag-sha"}
+	mockTag.EXPECT().FindLatestTag(tags, "api").Return(apiTag, nil)
+
+	projects := []domain.Project{{Name: "api", Path: "services/api"}}
+
+	// The impact analyzer sees all three commits but only oldFeat touches services/api.
+	// newCommit and tagCommit have no api-scoped files.
+	impactMap := map[string][]domain.Commit{
+		"api": {oldFeat}, // path-filtered: only oldFeat touches services/api
+	}
+	mockImpact.EXPECT().Analyze(projects, commits).Return(impactMap)
+
+	// After commitsAfterHash filters oldFeat (at index 2, which is >= cutoff index 1
+	// for tag-sha), the version calculator must receive an empty commit slice.
+	// An empty slice means no releasable changes → no bump.
+	mockVersion.EXPECT().Calculate(
+		domain.NewVersion(1, 0, 0), []domain.Commit{}, gomock.Nil(), gomock.Any(),
+	).Return(domain.NewVersion(1, 0, 0), domain.ReleaseNone, nil)
+
+	planner := app.NewReleasePlanner(mockGit, mockTag, mockVersion, mockImpact, mockLogger, domain.DefaultCommitTypeMapping())
+
+	plan, err := planner.Plan(context.Background(), projects, commits, domain.ReleaseModeIndependent, nil, false)
+	if err != nil {
+		t.Fatalf("Plan() error = %v", err)
+	}
+
+	if plan.HasReleasableProjects() {
+		t.Error("expected no release: all releasable commits are older than the last tag")
+	}
+	if len(plan.Projects[0].Commits) != 0 {
+		t.Errorf("expected 0 commits after filtering, got %d", len(plan.Projects[0].Commits))
+	}
+}
+
 func TestReleasePlanner_Plan_NoReleasable(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
