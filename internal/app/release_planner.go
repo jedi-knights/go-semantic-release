@@ -75,12 +75,12 @@ func (p *ReleasePlanner) planRepo(
 ) (*domain.ReleasePlan, error) {
 	latestTag, _ := p.tagService.FindLatestTag(tags, "")
 	currentVersion := domain.ZeroVersion()
-	sinceHash := ""
 
 	if latestTag != nil {
 		currentVersion = latestTag.Version
-		sinceHash = latestTag.Hash
-		_ = sinceHash // used for context, commits already provided
+		// Trim commits to only those newer than the last release tag so that
+		// commits already counted in a prior release are not re-analyzed.
+		commits = commitsAfterHash(commits, buildCommitIndex(commits), latestTag.Hash)
 	}
 
 	nextVersion, releaseType, err := p.versionCalc.Calculate(currentVersion, commits, policy, p.typeMapping)
@@ -113,6 +113,10 @@ func (p *ReleasePlanner) planIndependent(
 	policy *domain.BranchPolicy,
 	plan *domain.ReleasePlan,
 ) (*domain.ReleasePlan, error) {
+	// Build a position index once for all per-project filtering below.
+	// commits is ordered newest-first (git log default), so lower index = newer.
+	commitIndex := buildCommitIndex(commits)
+
 	impactMap := p.impactAnalyzer.Analyze(projects, commits)
 
 	for _, proj := range projects {
@@ -122,6 +126,9 @@ func (p *ReleasePlanner) planIndependent(
 		currentVersion := domain.ZeroVersion()
 		if latestTag != nil {
 			currentVersion = latestTag.Version
+			// Trim to only commits newer than the last release tag so that
+			// commits already counted in a prior release are not re-analyzed.
+			projectCommits = commitsAfterHash(projectCommits, commitIndex, latestTag.Hash)
 		}
 
 		nextVersion, releaseType, err := p.versionCalc.Calculate(currentVersion, projectCommits, policy, p.typeMapping)
@@ -148,4 +155,41 @@ func buildReason(rt domain.ReleaseType, commitCount int) string {
 		return "no releasable changes"
 	}
 	return fmt.Sprintf("%d commit(s) require %s bump", commitCount, rt)
+}
+
+// buildCommitIndex constructs a position map for a newest-first commit slice.
+// Lower index means more recent; this is the natural order from git log.
+func buildCommitIndex(commits []domain.Commit) map[string]int {
+	idx := make(map[string]int, len(commits))
+	for i := range commits {
+		idx[commits[i].Hash] = i
+	}
+	return idx
+}
+
+// commitsAfterHash returns the subset of commits that are newer than the commit
+// identified by sinceHash, as determined by position in the globally-ordered
+// newest-first index. Commits at a lower index than sinceHash's position are
+// newer; commits at the same or higher index were already included in the
+// release that created sinceHash.
+//
+// If sinceHash is empty or not present in the index (first release or the tag
+// commit is outside the fetched window), all commits are returned unchanged so
+// the first-release path is handled correctly.
+func commitsAfterHash(commits []domain.Commit, index map[string]int, sinceHash string) []domain.Commit {
+	if sinceHash == "" {
+		return commits
+	}
+	cutoff, ok := index[sinceHash]
+	if !ok {
+		// Tag commit not in the fetched window — treat every commit as new.
+		return commits
+	}
+	result := make([]domain.Commit, 0, cutoff)
+	for i := range commits {
+		if pos, exists := index[commits[i].Hash]; exists && pos < cutoff {
+			result = append(result, commits[i])
+		}
+	}
+	return result
 }
