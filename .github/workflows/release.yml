@@ -19,6 +19,11 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
           persist-credentials: true
+          # Use a PAT so that git operations (tag push) performed by
+          # semantic-release are authenticated with a user token. Tags pushed
+          # via the default GITHUB_TOKEN are blocked from triggering downstream
+          # workflows (e.g. goreleaser.yml) by GitHub.
+          token: ${{ secrets.GH_TOKEN }}
 
       - uses: actions/setup-go@v6
         with:
