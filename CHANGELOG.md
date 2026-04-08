@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.0 (2026-04-08)
+
+### Features
+
+- **release:** add GoReleaser cross-platform builds and composite GitHub Action (022c709)
+
 ## 0.6.1 (2026-04-05)
 
 ### Bug Fixes
