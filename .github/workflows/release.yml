@@ -7,6 +7,12 @@ on:
 permissions:
   contents: write
 
+# Prevent concurrent releases — a second push to main while a release is in
+# progress would create duplicate tags or conflicting changelog commits.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   release:
     name: Release

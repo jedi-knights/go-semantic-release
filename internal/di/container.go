@@ -367,6 +367,9 @@ func (c *Container) buildPlugins() ([]ports.Plugin, error) {
 type noopPublisher struct{}
 
 func (noopPublisher) Publish(ctx context.Context, _ ports.PublishParams) (domain.ProjectReleaseResult, error) {
+	// Respect cancellation so that a cancelled pipeline does not silently
+	// succeed at the publish step, keeping pipeline error propagation consistent
+	// regardless of whether a real publisher is wired.
 	if ctx.Err() != nil {
 		return domain.ProjectReleaseResult{}, ctx.Err()
 	}

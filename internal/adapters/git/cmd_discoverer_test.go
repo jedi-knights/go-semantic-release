@@ -15,6 +15,29 @@ import (
 
 // cmdTestDirEntry wraps testDirEntry; reused from the same test package.
 
+// TestCmdDiscoverer_NoModuleDirective verifies that a go.mod without a module
+// directive causes Discover to return an error wrapping ErrNoModuleDirective.
+func TestCmdDiscoverer_NoModuleDirective(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	mockFS := mocks.NewMockFileSystem(ctrl)
+
+	mockFS.EXPECT().Exists("/repo/go.mod").Return(true)
+	mockFS.EXPECT().Exists("/repo/go.work").Return(false)
+	mockFS.EXPECT().Exists("/repo/cmd").Return(true)
+	// go.mod with a go directive but no module declaration.
+	mockFS.EXPECT().ReadFile("/repo/go.mod").Return([]byte("go 1.21\n"), nil)
+
+	d := adaptergit.NewCmdDiscoverer(mockFS)
+	_, err := d.Discover(context.Background(), "/repo")
+	if err == nil {
+		t.Fatal("expected error for missing module directive, got nil")
+	}
+	if !errors.Is(err, adaptergit.ErrNoModuleDirective) {
+		t.Errorf("error chain does not contain ErrNoModuleDirective: %v", err)
+	}
+}
+
 func TestCmdDiscoverer_NoGoMod(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
@@ -87,9 +110,10 @@ func TestCmdDiscoverer_SingleService_NoSharedPkg(t *testing.T) {
 	// Walk cmd/ surfaces cmd/api/main.go
 	mockFS.EXPECT().Walk("/repo/cmd", gomock.Any()).DoAndReturn(
 		func(_ string, fn func(string, fs.DirEntry, error) error) error {
-			_ = fn("/repo/cmd/api", testDirEntry{name: "api", isDir: true}, nil)
-			_ = fn("/repo/cmd/api/main.go", testDirEntry{name: "main.go", isDir: false}, nil)
-			return nil
+			if err := fn("/repo/cmd/api", testDirEntry{name: "api", isDir: true}, nil); err != nil {
+				return err
+			}
+			return fn("/repo/cmd/api/main.go", testDirEntry{name: "main.go", isDir: false}, nil)
 		},
 	)
 
@@ -147,11 +171,16 @@ func TestCmdDiscoverer_MultipleServices_SharedPkg(t *testing.T) {
 	// Walk cmd/ surfaces two services.
 	mockFS.EXPECT().Walk("/repo/cmd", gomock.Any()).DoAndReturn(
 		func(_ string, fn func(string, fs.DirEntry, error) error) error {
-			_ = fn("/repo/cmd/api", testDirEntry{name: "api", isDir: true}, nil)
-			_ = fn("/repo/cmd/api/main.go", testDirEntry{name: "main.go", isDir: false}, nil)
-			_ = fn("/repo/cmd/worker", testDirEntry{name: "worker", isDir: true}, nil)
-			_ = fn("/repo/cmd/worker/main.go", testDirEntry{name: "main.go", isDir: false}, nil)
-			return nil
+			if err := fn("/repo/cmd/api", testDirEntry{name: "api", isDir: true}, nil); err != nil {
+				return err
+			}
+			if err := fn("/repo/cmd/api/main.go", testDirEntry{name: "main.go", isDir: false}, nil); err != nil {
+				return err
+			}
+			if err := fn("/repo/cmd/worker", testDirEntry{name: "worker", isDir: true}, nil); err != nil {
+				return err
+			}
+			return fn("/repo/cmd/worker/main.go", testDirEntry{name: "main.go", isDir: false}, nil)
 		},
 	)
 
@@ -246,9 +275,10 @@ func TestCmdDiscoverer_SharedPkgUsedByOnlyOneService_NotPromoted(t *testing.T) {
 
 	mockFS.EXPECT().Walk("/repo/cmd", gomock.Any()).DoAndReturn(
 		func(_ string, fn func(string, fs.DirEntry, error) error) error {
-			_ = fn("/repo/cmd/api", testDirEntry{name: "api", isDir: true}, nil)
-			_ = fn("/repo/cmd/api/main.go", testDirEntry{name: "main.go", isDir: false}, nil)
-			return nil
+			if err := fn("/repo/cmd/api", testDirEntry{name: "api", isDir: true}, nil); err != nil {
+				return err
+			}
+			return fn("/repo/cmd/api/main.go", testDirEntry{name: "main.go", isDir: false}, nil)
 		},
 	)
 
@@ -328,8 +358,7 @@ func TestCmdDiscoverer_ServiceNameFromPath(t *testing.T) {
 	// Deliver main.go without a preceding directory entry for "api".
 	mockFS.EXPECT().Walk("/repo/cmd", gomock.Any()).DoAndReturn(
 		func(_ string, fn func(string, fs.DirEntry, error) error) error {
-			_ = fn("/repo/cmd/api/main.go", testDirEntry{name: "main.go", isDir: false}, nil)
-			return nil
+			return fn("/repo/cmd/api/main.go", testDirEntry{name: "main.go", isDir: false}, nil)
 		},
 	)
 
@@ -434,9 +463,10 @@ func TestCmdDiscoverer_DuplicatePkgImport(t *testing.T) {
 
 	mockFS.EXPECT().Walk("/repo/cmd", gomock.Any()).DoAndReturn(
 		func(_ string, fn func(string, fs.DirEntry, error) error) error {
-			_ = fn("/repo/cmd/api", testDirEntry{name: "api", isDir: true}, nil)
-			_ = fn("/repo/cmd/api/main.go", testDirEntry{name: "main.go", isDir: false}, nil)
-			return nil
+			if err := fn("/repo/cmd/api", testDirEntry{name: "api", isDir: true}, nil); err != nil {
+				return err
+			}
+			return fn("/repo/cmd/api/main.go", testDirEntry{name: "main.go", isDir: false}, nil)
 		},
 	)
 

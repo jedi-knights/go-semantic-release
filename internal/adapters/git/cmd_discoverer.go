@@ -34,7 +34,12 @@ func NewCmdDiscoverer(fsys ports.FileSystem) *CmdDiscoverer {
 }
 
 // Discover returns discovered projects. Returns (nil, nil) when the repository
-// does not match the cmd/ monorepo pattern.
+// does not match the cmd/ monorepo pattern, or when the cmd/ directory exists
+// but contains no subdirectory with a main.go.
+//
+// Output order: services (sorted by name) followed by shared libraries (sorted
+// by name). This ordering is stable but is an implementation detail — callers
+// should not depend on the relative position of a specific project.
 func (d *CmdDiscoverer) Discover(ctx context.Context, rootPath string) ([]domain.Project, error) {
 	// Guard 1: single-module — go.mod must exist at root.
 	if !d.fs.Exists(filepath.Join(rootPath, "go.mod")) {
@@ -101,16 +106,12 @@ func (d *CmdDiscoverer) Discover(ctx context.Context, rootPath string) ([]domain
 	}
 
 	// Count how many services use each pkg/ package.
-	// Per-service deduplication (seen map) ensures a service importing the same
-	// pkg/ package twice (e.g. under two aliases) is counted only once.
+	// parsePkgImports already deduplicates within a file, so each entry in
+	// services[i].pkgs is unique — no additional per-service dedup is needed.
 	pkgUsage := make(map[string]int) // pkgName → usage count
 	for i := range services {
-		seen := make(map[string]bool)
 		for _, pkg := range services[i].pkgs {
-			if !seen[pkg] {
-				pkgUsage[pkg]++
-				seen[pkg] = true
-			}
+			pkgUsage[pkg]++
 		}
 	}
 
@@ -129,11 +130,9 @@ func (d *CmdDiscoverer) Discover(ctx context.Context, rootPath string) ([]domain
 	for i := range services {
 		svc := &services[i]
 		var deps []string
-		seen := make(map[string]bool)
 		for _, pkg := range svc.pkgs {
-			if sharedPkgs[pkg] && !seen[pkg] {
+			if sharedPkgs[pkg] {
 				deps = append(deps, pkg)
-				seen[pkg] = true
 			}
 		}
 		slices.Sort(deps)
@@ -183,13 +182,15 @@ func (d *CmdDiscoverer) parsePkgImports(filePath, moduleName string) ([]string, 
 	}
 
 	pkgPrefix := moduleName + "/pkg/"
+	seen := make(map[string]bool)
 	var pkgs []string
 	for _, imp := range f.Imports {
 		path := strings.Trim(imp.Path.Value, `"`)
 		if rest, ok := strings.CutPrefix(path, pkgPrefix); ok {
 			// Extract the immediate sub-package name: "module/pkg/queue/sub" → "queue".
 			name := strings.SplitN(rest, "/", 2)[0]
-			if name != "" {
+			if name != "" && !seen[name] {
+				seen[name] = true
 				pkgs = append(pkgs, name)
 			}
 		}
