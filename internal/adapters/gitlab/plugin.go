@@ -86,7 +86,7 @@ func (p *Plugin) VerifyConditions(ctx context.Context, rc *domain.ReleaseContext
 	if err != nil {
 		return fmt.Errorf("verifying GitLab access: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return fmt.Errorf("GitLab token is invalid or lacks permissions (HTTP %d)", resp.StatusCode)
@@ -133,7 +133,7 @@ func (p *Plugin) Publish(ctx context.Context, rc *domain.ReleaseContext) (*domai
 	if err != nil {
 		return nil, fmt.Errorf("publishing release: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(resp.Body)

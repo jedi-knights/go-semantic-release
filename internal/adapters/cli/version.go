@@ -59,9 +59,9 @@ func runVersion(cmd *cobra.Command, _ []string, opts *rootOptions) error {
 	for i := range plan.Projects {
 		name := displayProjectName(plan.Projects[i].Project)
 		if plan.Projects[i].ShouldRelease {
-			fmt.Fprintf(cmd.OutOrStdout(), "%s: %s → %s\n", name, plan.Projects[i].CurrentVersion, plan.Projects[i].NextVersion)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: %s → %s\n", name, plan.Projects[i].CurrentVersion, plan.Projects[i].NextVersion)
 		} else {
-			fmt.Fprintf(cmd.OutOrStdout(), "%s: %s (no change)\n", name, plan.Projects[i].CurrentVersion)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: %s (no change)\n", name, plan.Projects[i].CurrentVersion)
 		}
 	}
 	return nil

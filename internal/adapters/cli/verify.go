@@ -31,15 +31,15 @@ func runVerify(cmd *cobra.Command, _ []string, opts *rootOptions) error {
 	}
 
 	if result.Passed {
-		fmt.Fprintln(cmd.OutOrStdout(), "All release conditions verified.")
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "All release conditions verified.")
 		return nil
 	}
 
 	// Failures already printed to stderr; return ErrQuietExit so main exits
 	// with code 1 without printing a redundant error message.
-	fmt.Fprintln(cmd.ErrOrStderr(), "Release conditions not met:")
+	_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "Release conditions not met:")
 	for _, f := range result.Failures {
-		fmt.Fprintf(cmd.ErrOrStderr(), "  [FAIL] %s\n", f)
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "  [FAIL] %s\n", f)
 	}
 	return ErrQuietExit
 }

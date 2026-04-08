@@ -23,7 +23,7 @@ func NewConventionalLinter(cfg domain.LintConfig) *ConventionalLinter {
 
 // Lint checks a single commit against all configured rules.
 func (l *ConventionalLinter) Lint(commit domain.Commit) []domain.LintViolation {
-	var violations []domain.LintViolation
+	violations := make([]domain.LintViolation, 0, 5)
 
 	violations = append(violations, l.checkType(commit)...)
 	violations = append(violations, l.checkScope(commit)...)

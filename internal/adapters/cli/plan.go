@@ -72,11 +72,11 @@ func printPlan(w io.Writer, plan *domain.ReleasePlan, asJSON bool) error {
 		return json.NewEncoder(w).Encode(plan)
 	}
 
-	fmt.Fprintf(w, "Branch: %s\n", plan.Branch)
-	fmt.Fprintf(w, "Release mode: %s\n\n", modeString(plan))
+	_, _ = fmt.Fprintf(w, "Branch: %s\n", plan.Branch)
+	_, _ = fmt.Fprintf(w, "Release mode: %s\n\n", modeString(plan))
 
 	if !plan.HasReleasableProjects() {
-		fmt.Fprintln(w, "No releasable changes found.")
+		_, _ = fmt.Fprintln(w, "No releasable changes found.")
 		return nil
 	}
 
@@ -85,13 +85,13 @@ func printPlan(w io.Writer, plan *domain.ReleasePlan, asJSON bool) error {
 		if plan.Projects[i].ShouldRelease {
 			status = "release"
 		}
-		fmt.Fprintf(w, "  %s [%s]\n", displayProjectName(plan.Projects[i].Project), status)
-		fmt.Fprintf(w, "    Current: %s\n", plan.Projects[i].CurrentVersion)
+		_, _ = fmt.Fprintf(w, "  %s [%s]\n", displayProjectName(plan.Projects[i].Project), status)
+		_, _ = fmt.Fprintf(w, "    Current: %s\n", plan.Projects[i].CurrentVersion)
 		if plan.Projects[i].ShouldRelease {
-			fmt.Fprintf(w, "    Next:    %s (%s)\n", plan.Projects[i].NextVersion, plan.Projects[i].ReleaseType)
+			_, _ = fmt.Fprintf(w, "    Next:    %s (%s)\n", plan.Projects[i].NextVersion, plan.Projects[i].ReleaseType)
 		}
-		fmt.Fprintf(w, "    Commits: %d\n", len(plan.Projects[i].Commits))
-		fmt.Fprintf(w, "    Reason:  %s\n\n", plan.Projects[i].Reason)
+		_, _ = fmt.Fprintf(w, "    Commits: %d\n", len(plan.Projects[i].Commits))
+		_, _ = fmt.Fprintf(w, "    Reason:  %s\n\n", plan.Projects[i].Reason)
 	}
 	return nil
 }

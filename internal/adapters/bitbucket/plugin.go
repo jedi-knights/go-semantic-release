@@ -67,10 +67,10 @@ func (p *Plugin) Name() string { return "bitbucket" }
 // VerifyConditions checks that Bitbucket credentials and config are valid.
 func (p *Plugin) VerifyConditions(ctx context.Context, rc *domain.ReleaseContext) error {
 	if p.config.Token == "" {
-		return fmt.Errorf("Bitbucket token not found (set BB_TOKEN, BITBUCKET_TOKEN, or SEMANTIC_RELEASE_BITBUCKET_TOKEN)")
+		return fmt.Errorf("bitbucket token not found (set BB_TOKEN, BITBUCKET_TOKEN, or SEMANTIC_RELEASE_BITBUCKET_TOKEN)")
 	}
 	if p.config.Workspace == "" || p.config.RepoSlug == "" {
-		return fmt.Errorf("Bitbucket workspace and repo_slug must be configured")
+		return fmt.Errorf("bitbucket workspace and repo_slug must be configured")
 	}
 
 	apiURL := fmt.Sprintf("%s/repositories/%s/%s", p.config.APIURL, p.config.Workspace, p.config.RepoSlug)
@@ -84,13 +84,13 @@ func (p *Plugin) VerifyConditions(ctx context.Context, rc *domain.ReleaseContext
 	if err != nil {
 		return fmt.Errorf("verifying Bitbucket access: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		return fmt.Errorf("Bitbucket token is invalid or lacks permissions (HTTP %d)", resp.StatusCode)
+		return fmt.Errorf("bitbucket token is invalid or lacks permissions (HTTP %d)", resp.StatusCode)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("Bitbucket API returned HTTP %d for repo verification", resp.StatusCode)
+		return fmt.Errorf("bitbucket API returned HTTP %d for repo verification", resp.StatusCode)
 	}
 
 	return nil
@@ -133,11 +133,11 @@ func (p *Plugin) Publish(ctx context.Context, rc *domain.ReleaseContext) (*domai
 	if err != nil {
 		return nil, fmt.Errorf("publishing tag: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("Bitbucket create tag failed (%d): %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("bitbucket create tag failed (%d): %s", resp.StatusCode, string(body))
 	}
 
 	repoURL := fmt.Sprintf("https://bitbucket.org/%s/%s/src/%s", p.config.Workspace, p.config.RepoSlug, tagName)

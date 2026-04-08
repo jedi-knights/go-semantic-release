@@ -38,18 +38,18 @@ func runDetectProjects(cmd *cobra.Command, _ []string, opts *rootOptions) error 
 		return nil
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "Discovered %d project(s):\n\n", len(projects))
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Discovered %d project(s):\n\n", len(projects))
 	for _, p := range projects {
-		fmt.Fprintf(cmd.OutOrStdout(), "  %s\n", p.Name)
-		fmt.Fprintf(cmd.OutOrStdout(), "    Path:   %s\n", p.Path)
-		fmt.Fprintf(cmd.OutOrStdout(), "    Type:   %s\n", p.Type)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %s\n", p.Name)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Path:   %s\n", p.Path)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Type:   %s\n", p.Type)
 		if p.ModulePath != "" {
-			fmt.Fprintf(cmd.OutOrStdout(), "    Module: %s\n", p.ModulePath)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Module: %s\n", p.ModulePath)
 		}
 		if p.TagPrefix != "" {
-			fmt.Fprintf(cmd.OutOrStdout(), "    Tags:   %s*\n", p.TagPrefix)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Tags:   %s*\n", p.TagPrefix)
 		}
-		fmt.Fprintln(cmd.OutOrStdout())
+		_, _ = fmt.Fprintln(cmd.OutOrStdout())
 	}
 	return nil
 }

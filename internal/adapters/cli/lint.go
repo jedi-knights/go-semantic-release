@@ -40,7 +40,7 @@ func runLint(cmd *cobra.Command, _ []string, opts *rootOptions) error {
 	}
 
 	if len(commits) == 0 {
-		fmt.Fprintln(cmd.OutOrStdout(), "No commits to lint.")
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No commits to lint.")
 		return nil
 	}
 
@@ -60,7 +60,7 @@ func runLint(cmd *cobra.Command, _ []string, opts *rootOptions) error {
 		}
 		// Per-commit violation details go to stderr so they do not pollute
 		// piped output. The clean-pass summary below goes to stdout.
-		fmt.Fprintf(cmd.ErrOrStderr(), "%s %s\n", hash, commits[i].Message)
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "%s %s\n", hash, commits[i].Message)
 		for _, v := range violations {
 			totalViolations++
 			icon := "[WARN]"
@@ -68,17 +68,17 @@ func runLint(cmd *cobra.Command, _ []string, opts *rootOptions) error {
 				icon = "[ERROR]"
 				hasErrors = true
 			}
-			fmt.Fprintf(cmd.ErrOrStderr(), "  %s %s: %s\n", icon, v.Rule, v.Message)
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "  %s %s: %s\n", icon, v.Rule, v.Message)
 		}
-		fmt.Fprintln(cmd.ErrOrStderr())
+		_, _ = fmt.Fprintln(cmd.ErrOrStderr())
 	}
 
 	if totalViolations == 0 {
-		fmt.Fprintf(cmd.OutOrStdout(), "All %d commit(s) pass lint checks.\n", len(commits))
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "All %d commit(s) pass lint checks.\n", len(commits))
 		return nil
 	}
 
-	fmt.Fprintf(cmd.ErrOrStderr(), "Found %d violation(s) in %d commit(s).\n", totalViolations, len(commits))
+	_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Found %d violation(s) in %d commit(s).\n", totalViolations, len(commits))
 	if hasErrors {
 		// Violations already printed above; return ErrQuietExit so main exits
 		// with code 1 without printing a redundant error message.

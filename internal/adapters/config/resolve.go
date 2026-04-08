@@ -93,7 +93,7 @@ func loadExtendsFromURL(rawURL string) (domain.Config, error) {
 	if err != nil {
 		return domain.Config{}, fmt.Errorf("fetching URL: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return domain.Config{}, fmt.Errorf("HTTP %d fetching %s", resp.StatusCode, rawURL)
@@ -108,13 +108,15 @@ func loadExtendsFromURL(rawURL string) (domain.Config, error) {
 	if err != nil {
 		return domain.Config{}, fmt.Errorf("creating temp file: %w", err)
 	}
-	defer os.Remove(tmpFile.Name())
-	defer tmpFile.Close()
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+	defer func() { _ = tmpFile.Close() }()
 
 	if _, err := tmpFile.Write(data); err != nil {
 		return domain.Config{}, fmt.Errorf("writing temp file: %w", err)
 	}
-	tmpFile.Close()
+	if err := tmpFile.Close(); err != nil {
+		return domain.Config{}, fmt.Errorf("closing temp file: %w", err)
+	}
 
 	return loadExtendsFromFile(tmpFile.Name())
 }

@@ -26,9 +26,9 @@ type PreparePlugin struct {
 }
 
 // NewPreparePlugin creates a plugin that updates release files.
-func NewPreparePlugin(fs ports.FileSystem, logger ports.Logger, cfg domain.PrepareConfig) *PreparePlugin {
+func NewPreparePlugin(fsys ports.FileSystem, logger ports.Logger, cfg domain.PrepareConfig) *PreparePlugin {
 	return &PreparePlugin{
-		fs:            fs,
+		fs:            fsys,
 		logger:        logger,
 		changelogFile: cfg.ChangelogFile,
 		versionFile:   cfg.VersionFile,

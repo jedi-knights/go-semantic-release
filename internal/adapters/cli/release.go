@@ -57,14 +57,14 @@ func runRelease(cmd *cobra.Command, _ []string, opts *rootOptions) error {
 	}
 
 	if !plan.HasReleasableProjects() {
-		fmt.Fprintln(cmd.OutOrStdout(), "No releasable changes found.")
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No releasable changes found.")
 		return nil
 	}
 
 	// Warn when dry-run was automatically engaged because we are not in CI.
 	// This fires only for the release command — plan/lint/verify/etc. are unaffected.
 	if cfg.DryRun && !opts.dryRun && !cfg.CI {
-		fmt.Fprintln(cmd.ErrOrStderr(), "note: not running in CI — defaulting to dry run (pass --no-ci to override)")
+		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "note: not running in CI — defaulting to dry run (pass --no-ci to override)")
 	}
 
 	// Interactive confirmation before release.
@@ -78,7 +78,7 @@ func runRelease(cmd *cobra.Command, _ []string, opts *rootOptions) error {
 			return fmt.Errorf("reading confirmation: %w", promptErr)
 		}
 		if !confirmed {
-			fmt.Fprintln(cmd.OutOrStdout(), "Release cancelled.")
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Release cancelled.")
 			return nil
 		}
 	}
@@ -150,7 +150,7 @@ func printReleaseResult(w, errW io.Writer, result *domain.ReleaseResult, asJSON 
 		if result.Projects[i].Skipped {
 			// Use SkipReason from the result so the label is accurate regardless of
 			// why the project was skipped (dry run, policy gate, etc.).
-			fmt.Fprintf(w, "[%s] %s: %s → %s (tag: %s)\n",
+			_, _ = fmt.Fprintf(w, "[%s] %s: %s → %s (tag: %s)\n",
 				result.Projects[i].SkipReason,
 				projectName(result.Projects[i]),
 				result.Projects[i].CurrentVersion.String(),
@@ -159,12 +159,12 @@ func printReleaseResult(w, errW io.Writer, result *domain.ReleaseResult, asJSON 
 			continue
 		}
 		if result.Projects[i].Error != nil {
-			fmt.Fprintf(errW, "ERROR %s: %v\n", projectName(result.Projects[i]), result.Projects[i].Error)
+			_, _ = fmt.Fprintf(errW, "ERROR %s: %v\n", projectName(result.Projects[i]), result.Projects[i].Error)
 			continue
 		}
-		fmt.Fprintf(w, "Released %s %s (tag: %s)\n", projectName(result.Projects[i]), result.Projects[i].Version, result.Projects[i].TagName)
+		_, _ = fmt.Fprintf(w, "Released %s %s (tag: %s)\n", projectName(result.Projects[i]), result.Projects[i].Version, result.Projects[i].TagName)
 		if result.Projects[i].PublishURL != "" {
-			fmt.Fprintf(w, "  → %s\n", result.Projects[i].PublishURL)
+			_, _ = fmt.Fprintf(w, "  → %s\n", result.Projects[i].PublishURL)
 		}
 	}
 

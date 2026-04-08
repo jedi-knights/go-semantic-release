@@ -33,8 +33,8 @@ type WorkspaceDiscoverer struct {
 }
 
 // NewWorkspaceDiscoverer creates a discoverer for go workspace monorepos.
-func NewWorkspaceDiscoverer(fs ports.FileSystem) *WorkspaceDiscoverer {
-	return &WorkspaceDiscoverer{fs: fs}
+func NewWorkspaceDiscoverer(fsys ports.FileSystem) *WorkspaceDiscoverer {
+	return &WorkspaceDiscoverer{fs: fsys}
 }
 
 func (d *WorkspaceDiscoverer) Discover(ctx context.Context, rootPath string) ([]domain.Project, error) {
@@ -156,8 +156,8 @@ type ModuleDiscoverer struct {
 }
 
 // NewModuleDiscoverer creates a discoverer for nested go.mod monorepos.
-func NewModuleDiscoverer(fs ports.FileSystem) *ModuleDiscoverer {
-	return &ModuleDiscoverer{fs: fs}
+func NewModuleDiscoverer(fsys ports.FileSystem) *ModuleDiscoverer {
+	return &ModuleDiscoverer{fs: fsys}
 }
 
 func (d *ModuleDiscoverer) Discover(ctx context.Context, rootPath string) ([]domain.Project, error) {
@@ -266,8 +266,8 @@ func (d *ConfiguredDiscoverer) Discover(_ context.Context, _ string) ([]domain.P
 
 // readModuleName reads the module directive from a go.mod file.
 // It returns an error if the file cannot be read or has no module directive.
-func readModuleName(fs ports.FileSystem, modFile string) (string, error) {
-	data, err := fs.ReadFile(modFile)
+func readModuleName(fsys ports.FileSystem, modFile string) (string, error) {
+	data, err := fsys.ReadFile(modFile)
 	if err != nil {
 		return "", fmt.Errorf("reading %s: %w", modFile, err)
 	}

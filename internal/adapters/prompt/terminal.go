@@ -31,7 +31,9 @@ func NewTerminalPrompterWithIO(r io.Reader, w io.Writer) *TerminalPrompter {
 
 // Confirm asks the user a yes/no question and returns their answer.
 func (p *TerminalPrompter) Confirm(message string) (bool, error) {
-	fmt.Fprintf(p.writer, "%s [y/N] ", message)
+	if _, err := fmt.Fprintf(p.writer, "%s [y/N] ", message); err != nil {
+		return false, err
+	}
 
 	scanner := bufio.NewScanner(p.reader)
 	if !scanner.Scan() {
