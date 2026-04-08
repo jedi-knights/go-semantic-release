@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.5 (2026-04-08)
+
+### Bug Fixes
+
+- **action:** remove secrets context from input description string (9142b15)
+
 ## 0.8.4 (2026-04-08)
 
 ### Bug Fixes
