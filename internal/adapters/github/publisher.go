@@ -89,7 +89,7 @@ func (p *Publisher) Publish(ctx context.Context, params ports.PublishParams) (do
 	if err != nil {
 		return domain.ProjectReleaseResult{}, fmt.Errorf("publishing release: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(resp.Body)

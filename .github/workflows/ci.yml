@@ -41,19 +41,9 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Cache golangci-lint
-        id: lint-cache
-        uses: actions/cache@v5
+      - uses: golangci/golangci-lint-action@v9
         with:
-          path: ~/go/bin/golangci-lint
-          key: golangci-lint-v1.64.8-go${{ hashFiles('go.mod') }}
-
-      - name: Install golangci-lint
-        if: steps.lint-cache.outputs.cache-hit != 'true'
-        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
-
-      - name: golangci-lint
-        run: ~/go/bin/golangci-lint run ./...
+          version: "v2.11.4"
 
   build:
     name: Build

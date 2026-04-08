@@ -109,7 +109,7 @@ func (p *Plugin) VerifyConditions(ctx context.Context, rc *domain.ReleaseContext
 	if err != nil {
 		return fmt.Errorf("verifying GitHub access: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return fmt.Errorf("GitHub token is invalid or lacks permissions (HTTP %d)", resp.StatusCode)
@@ -200,7 +200,7 @@ func (p *Plugin) AddChannel(ctx context.Context, rc *domain.ReleaseContext) erro
 	if err != nil {
 		return fmt.Errorf("updating release: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -328,7 +328,7 @@ func (p *Plugin) createGHRelease(ctx context.Context, reqBody ghCreateReleaseReq
 	if err != nil {
 		return nil, fmt.Errorf("publishing release: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusCreated {
 		respBody, _ := io.ReadAll(resp.Body)
@@ -354,7 +354,7 @@ func (p *Plugin) getReleaseByTag(ctx context.Context, tag string) (*ghRelease, e
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, nil
@@ -389,7 +389,7 @@ func (p *Plugin) uploadAsset(ctx context.Context, releaseID int, filePath string
 	if err != nil {
 		return fmt.Errorf("opening %s: %w", filePath, err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	stat, err := file.Stat()
 	if err != nil {
@@ -418,7 +418,7 @@ func (p *Plugin) uploadAsset(ctx context.Context, releaseID int, filePath string
 	if err != nil {
 		return fmt.Errorf("uploading asset %s: %w", name, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(resp.Body)
@@ -441,7 +441,7 @@ func (p *Plugin) getPRsForCommit(ctx context.Context, sha string) ([]ghPR, error
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, nil
@@ -469,7 +469,7 @@ func (p *Plugin) commentOnIssue(ctx context.Context, number int, body string) er
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusCreated {
 		return fmt.Errorf("comment failed (%d)", resp.StatusCode)
@@ -495,7 +495,7 @@ func (p *Plugin) addLabelsToIssue(ctx context.Context, number int, labels []stri
 	if err != nil {
 		return
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 }
 
 func (p *Plugin) findFailureIssue(ctx context.Context, title string) (*ghIssue, error) {
@@ -511,7 +511,7 @@ func (p *Plugin) findFailureIssue(ctx context.Context, title string) (*ghIssue, 
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var issues []ghIssue
 	if err := json.NewDecoder(resp.Body).Decode(&issues); err != nil {
@@ -545,7 +545,7 @@ func (p *Plugin) createIssue(ctx context.Context, title, body string, labels []s
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusCreated {
 		respBody, _ := io.ReadAll(resp.Body)

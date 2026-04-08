@@ -64,12 +64,12 @@ func runChangelog(cmd *cobra.Command, _ []string, opts *rootOptions) error {
 		if err != nil {
 			return fmt.Errorf("generating changelog for %s: %w", releasable[i].Project.Name, err)
 		}
-		fmt.Fprintln(out, notes)
-		fmt.Fprintln(out)
+		_, _ = fmt.Fprintln(out, notes)
+		_, _ = fmt.Fprintln(out)
 	}
 
 	if !plan.HasReleasableProjects() {
-		fmt.Fprintln(out, "No releasable changes found.")
+		_, _ = fmt.Fprintln(out, "No releasable changes found.")
 	}
 
 	return nil

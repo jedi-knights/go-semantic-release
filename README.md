@@ -278,6 +278,72 @@ Each step is implemented as a plugin interface. Multiple plugins can implement t
 | Config-defined | `.semantic-release.yaml` projects | Configurable prefix |
 | Single module | Root `go.mod` | `vX.Y.Z` |
 
+## Release Pipeline
+
+This project uses a two-phase release pipeline. The phases are deliberately separated so that version analysis (semantic logic) is decoupled from distribution packaging (build artifacts).
+
+### Phase 1 — Version and Tag (go-semantic-release)
+
+Triggered on every push to `main` by `.github/workflows/release.yml`.
+
+1. Analyzes conventional commits since the last tag to determine the next semantic version (`patch`, `minor`, or `major`)
+2. Creates and pushes the git tag (e.g., `v1.3.0`)
+3. Writes `CHANGELOG.md` (prepends the new release entry) and `VERSION` (overwrites with the new version string) via the prepare step
+4. Commits those files back to `main` with `[skip ci]` to avoid re-triggering CI
+5. Does **not** create a GitHub release — that responsibility belongs to Phase 2
+
+Configuration lives in `.semantic-release.yaml`.
+
+### Phase 2 — Binary Builds and GitHub Release (GoReleaser)
+
+Triggered automatically by the `v*` tag pushed in Phase 1, via `.github/workflows/goreleaser.yml`.
+
+1. Reads the version directly from the git tag — no commit analysis, no version logic
+2. Cross-compiles the binary for all supported targets:
+
+   | OS    | Architecture |
+   |-------|-------------|
+   | Linux | amd64       |
+   | Linux | arm64       |
+   | macOS | amd64       |
+   | macOS | arm64       |
+
+3. Packages each binary as a `.tar.gz` archive: `semantic-release_<version>_<os>_<arch>.tar.gz`
+4. Generates a `checksums.txt` file over all archives
+5. Creates the GitHub release and attaches all archives and the checksum file
+
+Configuration lives in `.goreleaser.yml`.
+
+### Responsibility Split
+
+| Concern | Owner |
+|---------|-------|
+| Analyzing commits to determine next version | go-semantic-release |
+| Creating the git tag | go-semantic-release |
+| Writing `CHANGELOG.md` and `VERSION` | go-semantic-release |
+| Cross-compiling binaries | GoReleaser |
+| Creating the GitHub release | GoReleaser |
+| Attaching release assets | GoReleaser |
+
+### Using the Action
+
+A composite GitHub Action (`action.yml`) is provided so that other workflows can run `semantic-release` without installing a Go toolchain. The action downloads the pre-built Linux binary from the GitHub release that matches the pinned action ref.
+
+```yaml
+- uses: jedi-knights/go-semantic-release@v1.2.3
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+**Inputs:**
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `version` | `auto` | Version to install. When `auto`, uses the action's own git ref if it's a full semver tag (`v1.2.3`), otherwise fetches the latest release. |
+| `args` | `""` | Additional arguments passed to `semantic-release` (e.g., `--dry-run`). |
+
+When pinned to a tag (`@v1.2.3`), the action automatically downloads the binary from that exact release — no drift between the action version and the binary version.
+
 ## Development
 
 ### Prerequisites

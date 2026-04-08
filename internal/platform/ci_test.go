@@ -8,14 +8,9 @@ import (
 )
 
 func TestDetectCI_GitHubActions(t *testing.T) {
-	os.Setenv("GITHUB_ACTIONS", "true")
-	os.Setenv("GITHUB_REF_NAME", "main")
-	os.Setenv("GITHUB_SHA", "abc123")
-	defer func() {
-		os.Unsetenv("GITHUB_ACTIONS")
-		os.Unsetenv("GITHUB_REF_NAME")
-		os.Unsetenv("GITHUB_SHA")
-	}()
+	t.Setenv("GITHUB_ACTIONS", "true")
+	t.Setenv("GITHUB_REF_NAME", "main")
+	t.Setenv("GITHUB_SHA", "abc123")
 
 	ci := platform.DetectCI()
 	if !ci.Detected {
@@ -32,7 +27,9 @@ func TestDetectCI_GitHubActions(t *testing.T) {
 func TestDetectCI_NotDetected(t *testing.T) {
 	// Clear all CI env vars.
 	for _, key := range []string{"GITHUB_ACTIONS", "GITLAB_CI", "CIRCLECI", "TRAVIS", "JENKINS_URL", "TF_BUILD", "BITBUCKET_BUILD_NUMBER", "CI"} {
-		os.Unsetenv(key)
+		if err := os.Unsetenv(key); err != nil {
+			t.Fatalf("unsetenv %s: %v", key, err)
+		}
 	}
 
 	ci := platform.DetectCI()
@@ -42,8 +39,7 @@ func TestDetectCI_NotDetected(t *testing.T) {
 }
 
 func TestIsCI(t *testing.T) {
-	os.Setenv("CI", "true")
-	defer os.Unsetenv("CI")
+	t.Setenv("CI", "true")
 
 	if !platform.IsCI() {
 		t.Error("expected IsCI to return true when CI env var is set")

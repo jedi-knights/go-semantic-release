@@ -64,12 +64,12 @@ func (l *ConsoleLogger) Error(msg string, keysAndValues ...any) {
 
 func (l *ConsoleLogger) log(level, msg string, keysAndValues ...any) {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("[%s] %s", level, msg))
+	_, _ = fmt.Fprintf(&sb, "[%s] %s", level, msg)
 
 	for i := 0; i+1 < len(keysAndValues); i += 2 {
-		sb.WriteString(fmt.Sprintf(" %v=%v", keysAndValues[i], keysAndValues[i+1]))
+		_, _ = fmt.Fprintf(&sb, " %v=%v", keysAndValues[i], keysAndValues[i+1])
 	}
 	sb.WriteString("\n")
 
-	fmt.Fprint(l.out, sb.String())
+	_, _ = fmt.Fprint(l.out, sb.String())
 }

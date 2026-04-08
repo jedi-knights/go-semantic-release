@@ -43,7 +43,9 @@ prepare:
   version_file: VERSION
 
 github:
-  create_release: true
+  # GoReleaser creates the GitHub release and attaches pre-built binaries.
+  # go-semantic-release handles tagging and changelog only.
+  create_release: false
   owner: jedi-knights
   repo: go-semantic-release
   # token is read from GH_TOKEN, GITHUB_TOKEN, or SEMANTIC_RELEASE_GITHUB_TOKEN

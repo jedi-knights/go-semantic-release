@@ -1,0 +1,71 @@
+name: 'go-semantic-release'
+description: 'Run semantic-release using pre-built binaries — no Go toolchain required'
+branding:
+  icon: 'tag'
+  color: 'blue'
+
+inputs:
+  version:
+    description: 'Version to install (e.g. v1.2.3). Defaults to the action ref, falling back to latest.'
+    required: false
+    default: 'auto'
+  args:
+    description: 'Arguments to pass to semantic-release (e.g. --dry-run)'
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Install semantic-release
+      shell: bash
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+      run: |
+        VERSION="$INPUT_VERSION"
+
+        # Resolve the version to install:
+        #   1. If explicitly provided, use it.
+        #   2. If "auto", use the action's own ref when it's a full semver tag (v1.2.3).
+        #   3. Fall back to the latest release from the GitHub API.
+        if [ "$VERSION" = "auto" ]; then
+          if [[ "${GITHUB_ACTION_REF:-}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            VERSION="$GITHUB_ACTION_REF"
+          else
+            AUTH_HEADER=""
+            if [ -n "${GITHUB_TOKEN:-}" ]; then
+              AUTH_HEADER="Authorization: Bearer $GITHUB_TOKEN"
+            fi
+            VERSION=$(curl -fsSL ${AUTH_HEADER:+-H "$AUTH_HEADER"} \
+              "https://api.github.com/repos/jedi-knights/go-semantic-release/releases/latest" \
+              | grep '"tag_name"' | cut -d'"' -f4)
+          fi
+        fi
+
+        if [ -z "$VERSION" ]; then
+          echo "::error::Failed to resolve semantic-release version — check GitHub API rate limits or pass an explicit version input"
+          exit 1
+        fi
+
+        OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+        ARCH=$(uname -m)
+        case "$ARCH" in
+          x86_64)  ARCH="amd64" ;;
+          aarch64) ARCH="arm64" ;;
+          arm64)   ARCH="arm64" ;;
+        esac
+
+        # GoReleaser strips the leading 'v' from the archive filename.
+        VER="${VERSION#v}"
+        ARCHIVE="semantic-release_${VER}_${OS}_${ARCH}.tar.gz"
+        URL="https://github.com/jedi-knights/go-semantic-release/releases/download/${VERSION}/${ARCHIVE}"
+
+        echo "Installing semantic-release ${VERSION} (${OS}/${ARCH})"
+        curl -fsSL "$URL" | tar -xz -C "$RUNNER_TEMP" semantic-release
+        echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+    - name: Run semantic-release
+      shell: bash
+      env:
+        SR_ARGS: ${{ inputs.args }}
+      run: semantic-release $SR_ARGS
