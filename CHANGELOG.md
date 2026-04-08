@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.0 (2026-04-08)
+
+### Features
+
+- **discovery:** add cmd/ layout discoverer for single-module monorepos (e936372)
+
 ## 0.7.0 (2026-04-08)
 
 ### Features
