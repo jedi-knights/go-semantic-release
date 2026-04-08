@@ -1,4 +1,4 @@
-name: 'go-semantic-release'
+name: 'Semantic Release by Jedi Knights'
 description: 'Run semantic-release using pre-built binaries — no Go toolchain required'
 branding:
   icon: 'tag'
