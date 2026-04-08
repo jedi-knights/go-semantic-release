@@ -31,8 +31,5 @@ changelog:
   disable: true
 
 release:
-  github:
-    owner: jedi-knights
-    repo: go-semantic-release
   draft: false
   prerelease: auto
