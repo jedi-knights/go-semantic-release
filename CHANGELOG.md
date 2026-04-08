@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.4 (2026-04-08)
+
+### Bug Fixes
+
+- **review:** address post-merge code review findings (a7db2a7)
+
 ## 0.8.3 (2026-04-08)
 
 ### Bug Fixes
