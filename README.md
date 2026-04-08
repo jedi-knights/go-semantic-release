@@ -519,14 +519,15 @@ A composite GitHub Action (`action.yml`) is provided so that other workflows can
 
 ```yaml
 - uses: jedi-knights/go-semantic-release@v1.2.3
-  env:
-    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  with:
+    github_token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 **Inputs:**
 
 | Input | Default | Description |
 |-------|---------|-------------|
+| `github_token` | `${{ github.token }}` | GitHub token for API calls and releases. Pass `${{ secrets.GITHUB_TOKEN }}` or a PAT. |
 | `version` | `auto` | Version to install. When `auto`, uses the action's own git ref if it's a full semver tag (`v1.2.3`), otherwise fetches the latest release. |
 | `args` | `""` | Additional arguments passed to `semantic-release` (e.g., `--dry-run`). |
 

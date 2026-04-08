@@ -5,6 +5,10 @@ branding:
   color: 'blue'
 
 inputs:
+  github_token:
+    description: 'GitHub token used for API calls and releases. Typically ${{ secrets.GITHUB_TOKEN }}.'
+    required: false
+    default: ${{ github.token }}
   version:
     description: 'Version to install (e.g. v1.2.3). Defaults to the action ref, falling back to latest.'
     required: false
@@ -21,6 +25,7 @@ runs:
       shell: bash
       env:
         INPUT_VERSION: ${{ inputs.version }}
+        GITHUB_TOKEN: ${{ inputs.github_token }}
       run: |
         VERSION="$INPUT_VERSION"
 
@@ -32,13 +37,15 @@ runs:
           if [[ "${GITHUB_ACTION_REF:-}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             VERSION="$GITHUB_ACTION_REF"
           else
-            AUTH_HEADER=""
             if [ -n "${GITHUB_TOKEN:-}" ]; then
-              AUTH_HEADER="Authorization: Bearer $GITHUB_TOKEN"
+              VERSION=$(curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" \
+                "https://api.github.com/repos/jedi-knights/go-semantic-release/releases/latest" \
+                | grep '"tag_name"' | cut -d'"' -f4)
+            else
+              VERSION=$(curl -fsSL \
+                "https://api.github.com/repos/jedi-knights/go-semantic-release/releases/latest" \
+                | grep '"tag_name"' | cut -d'"' -f4)
             fi
-            VERSION=$(curl -fsSL ${AUTH_HEADER:+-H "$AUTH_HEADER"} \
-              "https://api.github.com/repos/jedi-knights/go-semantic-release/releases/latest" \
-              | grep '"tag_name"' | cut -d'"' -f4)
           fi
         fi
 
@@ -67,5 +74,6 @@ runs:
     - name: Run semantic-release
       shell: bash
       env:
+        GITHUB_TOKEN: ${{ inputs.github_token }}
         SR_ARGS: ${{ inputs.args }}
       run: semantic-release $SR_ARGS
