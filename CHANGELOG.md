@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.3 (2026-04-08)
+
+### Bug Fixes
+
+- **ci:** remove invalid goreleaser v2 release.github.repo field (2517c74)
+
 ## 0.8.2 (2026-04-08)
 
 ### Bug Fixes
