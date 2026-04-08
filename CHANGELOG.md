@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.2 (2026-04-08)
+
+### Bug Fixes
+
+- **ci:** pass GH_TOKEN to checkout so tag push triggers goreleaser (c343526)
+
 ## 0.8.1 (2026-04-08)
 
 ### Bug Fixes
