@@ -11,9 +11,10 @@ Supports monorepos with independent project versioning, including Go workspaces 
 
 - **Conventional Commits analysis** — parses commit messages to determine release types (major, minor, patch)
 - **Semantic versioning** — calculates next version based on commit impact
-- **Monorepo support** — independent versioning per project with three discovery modes:
+- **Monorepo support** — independent versioning per project with four discovery modes:
   - Go workspaces (`go.work`)
   - Multiple nested `go.mod` modules
+  - `cmd/` layout single-module monorepos (service + shared library detection)
   - Config-defined projects with path mappings
 - **Branch policies** — stable releases on main, prereleases on beta/alpha/next
 - **Changelog generation** — Markdown release notes grouped by commit type
@@ -153,6 +154,48 @@ release_mode: independent
 discover_modules: true
 ```
 
+### Auto-discovery with cmd/ layout (single-module monorepo)
+
+Use this mode when you have a single `go.mod` at the root (no `go.work`) with
+`cmd/<service>/main.go` entry points — a common pattern in Go monorepos at scale.
+
+```yaml
+release_mode: independent
+discover_cmd: true
+```
+
+The discoverer walks `cmd/` and creates one `cmd-service` project per immediate
+subdirectory that contains a `main.go`. It also parses each `main.go`'s imports:
+any `pkg/<name>` sub-package imported by **more than one** service becomes a
+`cmd-library` project and is automatically listed as a dependency of all
+consuming services.
+
+**Example layout:**
+
+```
+repo/
+├── go.mod                       # single module: github.com/org/myapp
+├── cmd/
+│   ├── api/
+│   │   └── main.go              # imports pkg/queue → ProjectTypeCmdService "api"
+│   └── worker/
+│       └── main.go              # imports pkg/queue → ProjectTypeCmdService "worker"
+└── pkg/
+    └── queue/                   # used by 2 services → ProjectTypeCmdLibrary "queue"
+```
+
+**Resulting projects:**
+
+| Name | Path | Type | Tag prefix | Dependencies |
+|------|------|------|------------|--------------|
+| `api` | `cmd/api` | `cmd-service` | `api/` | `[queue]` |
+| `worker` | `cmd/worker` | `cmd-service` | `worker/` | `[queue]` |
+| `queue` | `pkg/queue` | `cmd-library` | `queue/` | — |
+
+A `pkg/` package used by only one service is **not** promoted to a separate project — it is treated as an internal detail of that service only.
+
+> **Dependency propagation:** When `dependency_propagation: true` is also set, a commit that touches `pkg/queue` will automatically trigger a release for both `api` and `worker`.
+
 ### Branch policies
 
 ```yaml
@@ -269,14 +312,133 @@ The release pipeline follows the same 9-step lifecycle as [semantic-release](htt
 
 Each step is implemented as a plugin interface. Multiple plugins can implement the same step — for `analyzeCommits`, the highest release type wins; for `generateNotes`, outputs are concatenated. In dry-run mode, steps after `generateNotes` are skipped.
 
+```mermaid
+sequenceDiagram
+    participant C as CLI
+    participant A as App (ReleaseExecutor)
+    participant G as Git
+    participant CA as CommitAnalyzer
+    participant GN as NotesGenerator
+    participant P as PreparePlugin
+    participant GH as GitHub
+
+    C->>A: Execute(ctx, config)
+    A->>G: verifyConditions (git access)
+    A->>GH: verifyConditions (token, repo)
+    A->>G: fetchCommits since last tag
+    G-->>A: []Commit
+    A->>CA: analyzeCommits → ReleaseType
+    CA-->>A: patch | minor | major | none
+    alt ReleaseType == none
+        A-->>C: "no release necessary"
+    else release needed
+        A->>GN: generateNotes → Markdown
+        GN-->>A: release notes
+        alt dry-run mode
+            A-->>C: print plan, stop here
+        else publish
+            A->>P: prepare (write CHANGELOG.md, VERSION)
+            A->>G: publish (create tag, push)
+            A->>GH: publish (create GitHub release)
+            A->>GH: addChannel (update prerelease status)
+            A->>GH: success (comment PRs, apply labels)
+        end
+    end
+```
+
+#### Branch Policy Decision
+
+```mermaid
+flowchart TD
+    A([Current branch]) --> B{Matches a configured\nbranch policy?}
+    B -- No --> ERR([Error: releases not\nallowed from this branch])
+    B -- Yes --> C{prerelease: true?}
+    C -- No --> D[Stable release\nvX.Y.Z]
+    C -- Yes --> E{channel set?}
+    E -- Yes --> F[Prerelease\nvX.Y.Z-channel.N]
+    E -- No --> G[Prerelease\nvX.Y.Z-branch.N]
+    D --> H{branch_type:\nmaintenance?}
+    H -- Yes --> I{Version within\nconfigured range?}
+    I -- No --> ERR2([Error: version out\nof range for branch])
+    I -- Yes --> J([Tag and publish])
+    H -- No --> J
+    F --> J
+    G --> J
+```
+
 ### Monorepo Support
 
-| Case | Detection | Tags |
-|------|-----------|------|
-| Go workspace (`go.work`) | Parses `use` directives | `project/vX.Y.Z` |
-| Nested `go.mod` | Recursive file scan | `project/vX.Y.Z` |
-| Config-defined | `.semantic-release.yaml` projects | Configurable prefix |
-| Single module | Root `go.mod` | `vX.Y.Z` |
+| Case | Config flag | Detection | Tags |
+|------|-------------|-----------|------|
+| Go workspace (`go.work`) | _(always active)_ | Parses `use` directives | `project/vX.Y.Z` |
+| Nested `go.mod` | `discover_modules: true` | Recursive file scan | `project/vX.Y.Z` |
+| `cmd/` layout (single module) | `discover_cmd: true` | `cmd/<name>/main.go` + import analysis | `name/vX.Y.Z` |
+| Config-defined | `projects:` list | Static path mapping | Configurable prefix |
+| Single module (root) | _(always active)_ | Root `go.mod`, no subdirs | `vX.Y.Z` |
+
+#### Discovery Mode Selection
+
+The discoverers run in priority order. The first one to return at least one project wins — later ones are skipped.
+
+```mermaid
+flowchart TD
+    A([Start: semantic-release]) --> B{projects: list\nconfigured?}
+    B -- Yes --> C[ConfiguredDiscoverer\nreturns static projects]
+    B -- No --> D{go.work exists?}
+    D -- Yes --> E[WorkspaceDiscoverer\nparses use directives]
+    D -- No --> F{discover_modules:\ntrue?}
+    F -- Yes --> G[ModuleDiscoverer\nscans for go.mod files]
+    F -- No --> H{discover_cmd:\ntrue?}
+    H -- Yes --> I{go.mod at root\n+ no go.work\n+ cmd/ exists?}
+    I -- Yes --> J[CmdDiscoverer\nwalks cmd/ + parses imports]
+    I -- No --> K[No projects found\nroot module treated as single project]
+    H -- No --> K
+
+    C --> Z([Projects discovered])
+    E --> Z
+    G --> Z
+    J --> Z
+    K --> Z
+```
+
+#### cmd/ Discovery Detail
+
+```mermaid
+flowchart TD
+    A([CmdDiscoverer.Discover]) --> B{go.mod at root?}
+    B -- No --> RET([return nil, nil])
+    B -- Yes --> C{go.work present?}
+    C -- Yes --> RET
+    C -- No --> D{cmd/ directory exists?}
+    D -- No --> RET
+    D -- Yes --> E[Read module name\nfrom go.mod]
+    E --> F[Walk cmd/ for\nimmediate subdirs]
+    F --> G[For each subdir\nwith main.go:\nparse imports]
+    G --> H[Extract pkg/name\nimports per service]
+    H --> I{pkg/name used\nby > 1 service?}
+    I -- Yes --> J[Create ProjectTypeCmdLibrary\nAdd as dependency to\nconsuming services]
+    I -- No --> K[No library project\ncreated for that pkg]
+    J --> L([Return service + library projects])
+    K --> L
+```
+
+### Impact Analysis (Monorepo)
+
+When running in `independent` release mode, the impact analyzer determines which projects are affected by commits since their last tag.
+
+```mermaid
+flowchart TD
+    A([All commits since\nlast project tag]) --> B[For each commit:\ncompute changed paths]
+    B --> C{Path prefix matches\na project's Path?}
+    C -- Yes --> D[Assign commit to\nthat project]
+    C -- No --> E{dependency_propagation:\ntrue?}
+    E -- Yes --> F{Any matched project\nis a dependency of\nanother project?}
+    F -- Yes --> G[Propagate: assign commit\nto dependent project too]
+    F -- No --> H[Commit not assigned\nto any project]
+    E -- No --> H
+    D --> I([Projects with commits\n= candidates for release])
+    G --> I
+```
 
 ## Release Pipeline
 
@@ -313,6 +475,32 @@ Triggered automatically by the `v*` tag pushed in Phase 1, via `.github/workflow
 5. Creates the GitHub release and attaches all archives and the checksum file
 
 Configuration lives in `.goreleaser.yml`.
+
+### Two-Phase Pipeline Sequence
+
+```mermaid
+sequenceDiagram
+    participant PR as Pull Request merge
+    participant RL as release.yml\n(go-semantic-release)
+    participant GIT as GitHub\n(git tags)
+    participant GR as goreleaser.yml\n(GoReleaser)
+    participant GHR as GitHub\n(Releases)
+
+    PR->>RL: push to main triggers workflow
+    RL->>RL: analyze commits since last tag
+    RL->>RL: compute next semantic version
+    RL->>RL: generate CHANGELOG.md entry
+    RL->>GIT: git push tag vX.Y.Z
+    RL->>GIT: git push CHANGELOG.md + VERSION commit [skip ci]
+    Note over RL,GIT: Phase 1 complete — semantic version decided
+
+    GIT->>GR: v* tag push triggers goreleaser.yml
+    GR->>GR: cross-compile linux/amd64, linux/arm64\ndarwin/amd64, darwin/arm64
+    GR->>GR: package each binary as .tar.gz
+    GR->>GR: generate checksums.txt
+    GR->>GHR: create GitHub release vX.Y.Z\nattach archives + checksums
+    Note over GR,GHR: Phase 2 complete — binaries distributed
+```
 
 ### Responsibility Split
 
@@ -400,6 +588,7 @@ internal/di/             # DI container wiring
 - [x] External plugin loading (`--plugins`)
 - [x] Commit message linting
 - [x] Interactive mode for release confirmation
+- [x] `cmd/` layout discovery for single-module Go monorepos (`discover_cmd: true`)
 
 ## References
 
