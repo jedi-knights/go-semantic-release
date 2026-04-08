@@ -6,7 +6,7 @@ branding:
 
 inputs:
   github_token:
-    description: 'GitHub token used for API calls and releases. Typically ${{ secrets.GITHUB_TOKEN }}.'
+    description: 'GitHub token for API calls and releases. Pass secrets.GITHUB_TOKEN or a PAT.'
     required: false
     default: ${{ github.token }}
   version:
