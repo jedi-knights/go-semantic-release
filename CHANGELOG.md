@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.1 (2026-04-08)
+
+### Bug Fixes
+
+- **ci:** use GH_TOKEN PAT so tag push triggers goreleaser workflow (18502ff)
+
 ## 0.8.0 (2026-04-08)
 
 ### Features
