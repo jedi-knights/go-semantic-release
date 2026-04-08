@@ -19,12 +19,14 @@ import (
 // from I/O failures.
 var ErrNoModuleDirective = errors.New("no module directive found")
 
-// Compile-time interface compliance checks.
+// Compile-time interface compliance checks for all ProjectDiscoverer implementations
+// in this package.
 var (
 	_ ports.ProjectDiscoverer = (*WorkspaceDiscoverer)(nil)
 	_ ports.ProjectDiscoverer = (*ModuleDiscoverer)(nil)
 	_ ports.ProjectDiscoverer = (*ConfiguredDiscoverer)(nil)
 	_ ports.ProjectDiscoverer = (*CompositeDiscoverer)(nil)
+	_ ports.ProjectDiscoverer = (*CmdDiscoverer)(nil)
 )
 
 // WorkspaceDiscoverer discovers projects from go.work files.

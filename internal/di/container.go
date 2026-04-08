@@ -215,6 +215,9 @@ func (c *Container) buildDiscoverer() ports.ProjectDiscoverer {
 	if c.config.DiscoverModules {
 		discoverers = append(discoverers, adaptergit.NewModuleDiscoverer(fs))
 	}
+	if c.config.DiscoverCmd {
+		discoverers = append(discoverers, adaptergit.NewCmdDiscoverer(fs))
+	}
 
 	return adaptergit.NewCompositeDiscoverer(discoverers...)
 }

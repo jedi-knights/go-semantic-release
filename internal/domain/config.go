@@ -20,6 +20,7 @@ type Config struct {
 	// Project/monorepo settings.
 	Projects              []ProjectConfig `mapstructure:"projects"`
 	DiscoverModules       bool            `mapstructure:"discover_modules"`
+	DiscoverCmd           bool            `mapstructure:"discover_cmd"`
 	IncludePaths          []string        `mapstructure:"include_paths"`
 	ExcludePaths          []string        `mapstructure:"exclude_paths"`
 	DependencyPropagation bool            `mapstructure:"dependency_propagation"`
@@ -139,6 +140,7 @@ func DefaultConfig() Config {
 		CommitTypes:           DefaultCommitTypeMapping(),
 		ChangelogSections:     DefaultChangelogSections(),
 		DiscoverModules:       false,
+		DiscoverCmd:           false,
 		DependencyPropagation: false,
 		Lint:                  DefaultLintConfig(),
 		GitAuthor:             DefaultGitIdentity(),

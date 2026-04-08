@@ -22,6 +22,11 @@ const (
 	ProjectTypeConfigured ProjectType = "configured"
 	// ProjectTypeRoot indicates the project is at the repository root (no path prefix on tags).
 	ProjectTypeRoot ProjectType = "root"
+	// ProjectTypeCmdService indicates the project is a deployable binary under cmd/<name>.
+	ProjectTypeCmdService ProjectType = "cmd-service"
+	// ProjectTypeCmdLibrary indicates the project is a shared library package (e.g. pkg/<name>)
+	// imported by one or more cmd services in a single-module monorepo.
+	ProjectTypeCmdLibrary ProjectType = "cmd-library"
 )
 
 // String returns the string representation of the release mode.
