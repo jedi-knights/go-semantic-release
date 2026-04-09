@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/jedi-knights/go-semantic-release/internal/domain"
 	"github.com/jedi-knights/go-semantic-release/internal/ports"
@@ -73,14 +74,15 @@ func (p *ReleasePlanner) planRepo(
 	policy *domain.BranchPolicy,
 	plan *domain.ReleasePlan,
 ) (*domain.ReleasePlan, error) {
-	// In repo mode with a named project the tags are created with the project
-	// prefix (e.g. sun-neovim/v0.1.1). Use the project name for lookup so the
-	// baseline tag is found; fall back to "" for anonymous/root-only repos.
-	projectName := ""
-	if len(projects) > 0 {
-		projectName = projects[0].Name
+	// Derive the tag-lookup prefix from the project's TagPrefix. Root projects
+	// (TagPrefix == "") use unprefixed tags like "v1.0.0" and must look up with
+	// "". Named projects with an explicit prefix (e.g. "sun-neovim/") have tags
+	// like "sun-neovim/v0.1.1" and must look up with "sun-neovim".
+	tagLookupPrefix := ""
+	if len(projects) > 0 && projects[0].TagPrefix != "" {
+		tagLookupPrefix = strings.TrimSuffix(projects[0].TagPrefix, "/")
 	}
-	latestTag, _ := p.tagService.FindLatestTag(tags, projectName)
+	latestTag, _ := p.tagService.FindLatestTag(tags, tagLookupPrefix)
 	currentVersion := domain.ZeroVersion()
 
 	if latestTag != nil {
