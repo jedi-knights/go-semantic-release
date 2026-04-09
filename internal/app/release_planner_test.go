@@ -53,6 +53,56 @@ func TestReleasePlanner_Plan_RepoMode(t *testing.T) {
 	}
 }
 
+// TestReleasePlanner_Plan_RepoMode_WithTagPrefix covers the case where a single
+// project in repo mode uses prefixed tags (e.g. "sun-neovim/v0.1.1"). The
+// planner must derive the lookup prefix from TagPrefix, not use "" (which would
+// miss the existing tag and recompute from scratch).
+func TestReleasePlanner_Plan_RepoMode_WithTagPrefix(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	mockGit := mocks.NewMockGitRepository(ctrl)
+	mockTag := mocks.NewMockTagService(ctrl)
+	mockVersion := mocks.NewMockVersionCalculator(ctrl)
+	mockImpact := mocks.NewMockProjectImpactAnalyzer(ctrl)
+	mockLogger := mocks.NewMockLogger(ctrl)
+	mockLogger.EXPECT().Debug(gomock.Any(), gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
+
+	tags := []domain.Tag{{Name: "sun-neovim/v0.1.0", Hash: "abc123"}}
+	mockGit.EXPECT().ListTags(gomock.Any()).Return(tags, nil)
+	mockGit.EXPECT().CurrentBranch(gomock.Any()).Return("main", nil)
+
+	latestTag := &domain.Tag{Name: "sun-neovim/v0.1.0", Version: domain.NewVersion(0, 1, 0), Hash: "abc123"}
+	// Planner must call FindLatestTag with "sun-neovim" (derived from TagPrefix
+	// "sun-neovim/"), not "" (which would miss the existing tag entirely).
+	mockTag.EXPECT().FindLatestTag(tags, "sun-neovim").Return(latestTag, nil)
+
+	commits := []domain.Commit{{Type: "fix", Description: "fix crash"}}
+	mockVersion.EXPECT().Calculate(
+		domain.NewVersion(0, 1, 0), commits, gomock.Nil(), gomock.Any(),
+	).Return(domain.NewVersion(0, 1, 1), domain.ReleasePatch, nil)
+
+	planner := app.NewReleasePlanner(mockGit, mockTag, mockVersion, mockImpact, mockLogger, domain.DefaultCommitTypeMapping())
+
+	projects := []domain.Project{{Name: "sun-neovim", Path: ".", TagPrefix: "sun-neovim/"}}
+	plan, err := planner.Plan(context.Background(), projects, commits, domain.ReleaseModeRepo, nil, false)
+	if err != nil {
+		t.Fatalf("Plan() error = %v", err)
+	}
+	if !plan.HasReleasableProjects() {
+		t.Error("expected releasable projects")
+	}
+	if len(plan.Projects) != 1 {
+		t.Fatalf("expected 1 project plan, got %d", len(plan.Projects))
+	}
+	if !plan.Projects[0].NextVersion.Equal(domain.NewVersion(0, 1, 1)) {
+		t.Errorf("next version = %v, want 0.1.1", plan.Projects[0].NextVersion)
+	}
+	if !plan.Projects[0].CurrentVersion.Equal(domain.NewVersion(0, 1, 0)) {
+		t.Errorf("current version = %v, want 0.1.0 — tag prefix lookup failed to find baseline", plan.Projects[0].CurrentVersion)
+	}
+}
+
 func TestReleasePlanner_Plan_IndependentMode(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
