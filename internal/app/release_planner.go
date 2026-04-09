@@ -73,7 +73,14 @@ func (p *ReleasePlanner) planRepo(
 	policy *domain.BranchPolicy,
 	plan *domain.ReleasePlan,
 ) (*domain.ReleasePlan, error) {
-	latestTag, _ := p.tagService.FindLatestTag(tags, "")
+	// In repo mode with a named project the tags are created with the project
+	// prefix (e.g. sun-neovim/v0.1.1). Use the project name for lookup so the
+	// baseline tag is found; fall back to "" for anonymous/root-only repos.
+	projectName := ""
+	if len(projects) > 0 {
+		projectName = projects[0].Name
+	}
+	latestTag, _ := p.tagService.FindLatestTag(tags, projectName)
 	currentVersion := domain.ZeroVersion()
 
 	if latestTag != nil {
