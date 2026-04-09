@@ -3,7 +3,9 @@ name: GoReleaser
 on:
   push:
     tags:
-      - 'v*'
+      # Match only full semver tags (e.g. v1.2.3). Floating major-version tags
+      # like v0 or v1 also match 'v*' and would trigger a duplicate release run.
+      - 'v*.*.*'
 
 permissions:
   contents: write
