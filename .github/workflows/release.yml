@@ -77,3 +77,14 @@ jobs:
           fi
           git commit -m "chore(release): update CHANGELOG.md and VERSION [skip ci]"
           git push
+
+      - name: Forward floating major version tag
+        if: steps.plan.outputs.has_release == 'true'
+        run: |
+          # Keep the floating major-version tag (e.g. v0) pointing at the
+          # latest patch release so consumers can pin to @v0 instead of a
+          # specific patch version and get updates automatically.
+          VERSION=$(cat VERSION)
+          MAJOR="v${VERSION%%.*}"
+          git tag -f "$MAJOR" "v${VERSION}"
+          git push origin "$MAJOR" --force
