@@ -7,6 +7,21 @@ A production-grade semantic release utility written in native Go. Analyzes conve
 
 Supports monorepos with independent project versioning, including Go workspaces and multi-module repositories.
 
+## Table of Contents
+
+- [Features](#features)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Usage](#usage)
+- [Configuration](#configuration)
+- [Release Candidate Workflows](#release-candidate-workflows)
+- [Architecture](#architecture)
+- [Release Pipeline](#release-pipeline)
+- [Development](#development)
+- [Roadmap](#roadmap)
+- [References](#references)
+- [License](#license)
+
 ## Features
 
 - **Conventional Commits analysis** — parses commit messages to determine release types (major, minor, patch)
