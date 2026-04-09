@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.6 (2026-04-09)
+
+### Bug Fixes
+
+- **release:** make tag creation idempotent on workflow re-runs (01edac4)
+
 ## 0.8.5 (2026-04-08)
 
 ### Bug Fixes
