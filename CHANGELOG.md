@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.7 (2026-04-09)
+
+### Bug Fixes
+
+- **ci:** narrow goreleaser trigger to semver tags only (007842d)
+
 ## 0.8.6 (2026-04-09)
 
 ### Bug Fixes
