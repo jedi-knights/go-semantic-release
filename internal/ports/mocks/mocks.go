@@ -303,9 +303,9 @@ func (m *MockVersionCalculator) EXPECT() *MockVersionCalculatorMockRecorder {
 }
 
 // Calculate mocks base method.
-func (m *MockVersionCalculator) Calculate(current domain.Version, commits []domain.Commit, policy *domain.BranchPolicy, typeMapping map[string]domain.ReleaseType) (domain.Version, domain.ReleaseType, error) {
+func (m *MockVersionCalculator) Calculate(current domain.Version, commits []domain.Commit, policy *domain.BranchPolicy, typeMapping map[string]domain.ReleaseType, prereleaseCounter int) (domain.Version, domain.ReleaseType, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Calculate", current, commits, policy, typeMapping)
+	ret := m.ctrl.Call(m, "Calculate", current, commits, policy, typeMapping, prereleaseCounter)
 	ret0, _ := ret[0].(domain.Version)
 	ret1, _ := ret[1].(domain.ReleaseType)
 	ret2, _ := ret[2].(error)
@@ -313,9 +313,9 @@ func (m *MockVersionCalculator) Calculate(current domain.Version, commits []doma
 }
 
 // Calculate indicates an expected call of Calculate.
-func (mr *MockVersionCalculatorMockRecorder) Calculate(current, commits, policy, typeMapping any) *gomock.Call {
+func (mr *MockVersionCalculatorMockRecorder) Calculate(current, commits, policy, typeMapping, prereleaseCounter any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Calculate", reflect.TypeOf((*MockVersionCalculator)(nil).Calculate), current, commits, policy, typeMapping)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Calculate", reflect.TypeOf((*MockVersionCalculator)(nil).Calculate), current, commits, policy, typeMapping, prereleaseCounter)
 }
 
 // MockChangelogGenerator is a mock of ChangelogGenerator interface.

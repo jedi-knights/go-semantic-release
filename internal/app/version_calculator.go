@@ -23,6 +23,7 @@ func (s *VersionCalculatorService) Calculate(
 	commits []domain.Commit,
 	policy *domain.BranchPolicy,
 	typeMapping map[string]domain.ReleaseType,
+	prereleaseCounter int,
 ) (domain.Version, domain.ReleaseType, error) {
 	bump := aggregateBump(commits, typeMapping)
 	if !bump.IsReleasable() {
@@ -31,11 +32,12 @@ func (s *VersionCalculatorService) Calculate(
 
 	// For maintenance branches, constrain the allowed bump type.
 	if policy != nil && policy.IsMaintenance() {
+		original := bump
 		bump = constrainMaintenanceBump(bump, policy)
 		if !bump.IsReleasable() {
 			return current, domain.ReleaseNone,
 				fmt.Errorf("commit requires %s bump but maintenance branch %q does not allow it",
-					aggregateBump(commits, typeMapping), policy.Name)
+					original, policy.Name)
 		}
 	}
 
@@ -50,7 +52,7 @@ func (s *VersionCalculatorService) Calculate(
 
 	// Apply prerelease identifier.
 	if policy != nil && policy.IsPrerelease() {
-		pre := buildPrereleaseID(policy.Channel, next)
+		pre := buildPrereleaseID(policy.Channel, prereleaseCounter)
 		next = next.WithPrerelease(pre)
 	}
 
@@ -59,24 +61,30 @@ func (s *VersionCalculatorService) Calculate(
 
 // constrainMaintenanceBump limits the bump type based on the maintenance range.
 // A "N.N.x" range only allows patch bumps; "N.x" allows patch and minor.
+//
+// NOTE: for "N.x" ranges this function permits minor bumps but does not verify
+// that the resulting version stays within the major boundary. That upper-bound
+// check is performed by ValidateMaintenanceVersion (called by Calculate after
+// Bump). Callers must invoke both functions in sequence; calling this function
+// alone is not sufficient to enforce the full maintenance constraint.
 func constrainMaintenanceBump(bump domain.ReleaseType, policy *domain.BranchPolicy) domain.ReleaseType {
 	_, maxVer, err := policy.MaintenanceRange()
 	if err != nil {
-		return bump
+		return domain.ReleaseNone
 	}
 
-	// If max differs only in minor (N.N+1.0), only patch is allowed.
-	// If max differs in major (N+1.0.0), patch and minor are allowed.
+	// Major bumps are never allowed on any maintenance branch.
+	if bump == domain.ReleaseMajor {
+		return domain.ReleaseNone
+	}
+
+	// "N.N.x" range (max differs only in minor): only patch is allowed.
+	// "N.x" range (max differs in major): patch and minor are both allowed.
 	if maxVer.Minor > 0 && maxVer.Patch == 0 {
 		// Range like "1.2.x" → max is "1.3.0" → only patch allowed.
 		if bump > domain.ReleasePatch {
 			return domain.ReleaseNone
 		}
-	}
-
-	// Major bumps are never allowed on maintenance branches.
-	if bump == domain.ReleaseMajor {
-		return domain.ReleaseNone
 	}
 
 	return bump
@@ -91,9 +99,12 @@ func aggregateBump(commits []domain.Commit, typeMapping map[string]domain.Releas
 	return highest
 }
 
-func buildPrereleaseID(channel string, version domain.Version) string {
+func buildPrereleaseID(channel string, counter int) string {
 	if channel == "" {
 		channel = "pre"
 	}
-	return fmt.Sprintf("%s.%d.%d.%d", channel, version.Major, version.Minor, version.Patch)
+	if counter < 0 {
+		counter = 0
+	}
+	return fmt.Sprintf("%s.%d", channel, counter)
 }

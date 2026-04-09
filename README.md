@@ -272,6 +272,170 @@ github:
   # token: set via GH_TOKEN, GITHUB_TOKEN, or SEMANTIC_RELEASE_GITHUB_TOKEN
 ```
 
+## Release Candidate Workflows
+
+go-semantic-release supports prerelease branching strategies for teams that want to validate builds before publishing a stable release. Release candidates are driven entirely by conventional commits — the tool determines the base version and increments the RC counter automatically based on what you push. No manual version management is required.
+
+**This feature is opt-in.** If no prerelease branches are configured, behavior is identical to before — stable releases on `main` continue to work exactly as they always have. Nothing needs to change for teams that do not want release candidates.
+
+### How it works
+
+A branch configured with `prerelease: true` and a `channel` name produces prerelease tags on every qualifying commit. The tag format is:
+
+```
+v{Major}.{Minor}.{Patch}-{channel}.{N}
+```
+
+- The base version (`Major.Minor.Patch`) is calculated from commits since the last stable tag, using the same conventional commit rules as `main`
+- `N` is a counter starting at `0` that increments with each qualifying commit to that branch
+- The counter resets to `0` whenever the base version changes (e.g., a `feat:` commit raises the base from patch to minor)
+- `docs:`, `chore:`, and other non-releasing commit types do not produce a tag and do not increment the counter
+
+### Enabling prerelease branches
+
+Add a branch policy with `prerelease: true` and a `channel` to `.semantic-release.yaml`. The channel name becomes the identifier in the prerelease tag:
+
+```yaml
+branches:
+  - name: main
+    is_default: true
+  - name: rc
+    prerelease: true
+    channel: rc
+```
+
+You can name the branch and channel anything. Common conventions are `rc`, `next`, `beta`, and `alpha`. The branch must exist in git — the config tells go-semantic-release what to do when it runs on that branch.
+
+### Pattern 1: Long-lived branch
+
+A permanent prerelease branch runs continuously ahead of `main`. Every qualifying commit tags a new RC automatically. This is the approach Angular uses with their `next` branch.
+
+**Setup (once):**
+
+```bash
+git checkout -b next
+git push origin next
+```
+
+**Config:**
+
+```yaml
+branches:
+  - name: main
+    is_default: true
+  - name: next
+    prerelease: true
+    channel: next
+```
+
+**Workflow:**
+
+```
+# Commits pushed to the next branch
+feat: add OAuth2 PKCE support           → v1.1.0-next.0
+fix: correct token expiry calculation   → v1.1.0-next.1
+fix: handle edge case in refresh flow   → v1.1.0-next.2
+feat: add refresh token rotation        → v1.2.0-next.0   ← base bumps to minor, counter resets
+docs: update auth guide                 →  (no tag)
+fix: PKCE code challenge length         → v1.2.0-next.1
+
+# Merge next → main when ready
+# main sees the same commits → v1.2.0 tagged (stable, no prerelease suffix)
+
+# next is now at the same commit as main
+# push new work to start the next RC cycle immediately
+feat: next cycle begins                 → v1.3.0-next.0
+```
+
+The branch is never deleted. After merging, development on the next release cycle begins immediately with the first new qualifying commit.
+
+### Pattern 2: Short-lived branch
+
+An `rc` branch is created intentionally when a team begins stabilizing a specific feature set, then deleted after graduating to stable. The branch name signals that an active RC cycle is in progress.
+
+**Config:**
+
+```yaml
+branches:
+  - name: main
+    is_default: true
+  - name: rc
+    prerelease: true
+    channel: rc
+```
+
+**Start an RC cycle:**
+
+```bash
+git checkout -b rc
+git push origin rc
+```
+
+**Workflow:**
+
+```
+feat: new payment provider              → v1.1.0-rc.0
+fix: handle declined card response      → v1.1.0-rc.1
+fix: retry logic for network errors     → v1.1.0-rc.2
+
+# Validated — merge rc → main
+# main: v1.1.0 tagged (stable)
+```
+
+**Clean up:**
+
+```bash
+git branch -d rc
+git push origin --delete rc
+```
+
+When the next stabilization cycle is needed, create a fresh `rc` branch from `main`.
+
+### Using both patterns together
+
+Both policies can coexist in the same config. Use whichever branch fits the situation — long-running feature work on `next`, a targeted stabilization pass on `rc`:
+
+```yaml
+branches:
+  - name: main
+    is_default: true
+  - name: next
+    prerelease: true
+    channel: next
+  - name: rc
+    prerelease: true
+    channel: rc
+```
+
+Each branch manages its own tag sequence independently. Tags from different channels never collide:
+
+```
+next:  v1.3.0-next.0, v1.3.0-next.1, v1.4.0-next.0 ...
+rc:    v1.2.1-rc.0, v1.2.1-rc.1 ...
+main:  v1.2.0, v1.2.1, v1.3.0 ...
+```
+
+### Graduating to stable
+
+Merging a prerelease branch into `main` triggers the stable release automatically. No special command is needed — the tool runs on `main`, sees the same commits, and produces the matching stable tag:
+
+```
+Last RC tag:  v2.0.0-next.4
+→ merge next into main
+→ v2.0.0 tagged on main (stable)
+```
+
+The stable version always matches the base version of the last RC from that branch. This works because `main` has no prerelease policy — the counter and channel suffix are dropped.
+
+### Counter reset rule
+
+| Commit after `v1.1.0-rc.2` | Result |
+|-----------------------------|--------|
+| `fix: ...` | `v1.1.0-rc.3` — base unchanged, counter increments |
+| `feat: ...` | `v1.2.0-rc.0` — minor bump, counter resets |
+| `feat!: ...` (breaking change) | `v2.0.0-rc.0` — major bump, counter resets |
+| `docs: ...` or `chore: ...` | No tag — non-releasing types are skipped |
+
 ## Architecture
 
 semantic-release follows **Hexagonal Architecture** (Ports and Adapters) with clear separation:
