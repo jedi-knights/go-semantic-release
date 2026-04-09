@@ -317,7 +317,7 @@ git checkout -b next
 git push origin next
 ```
 
-**Config:**
+**`.semantic-release.yaml`:**
 
 ```yaml
 branches:
@@ -353,7 +353,7 @@ The branch is never deleted. After merging, development on the next release cycl
 
 An `rc` branch is created intentionally when a team begins stabilizing a specific feature set, then deleted after graduating to stable. The branch name signals that an active RC cycle is in progress.
 
-**Config:**
+**`.semantic-release.yaml`:**
 
 ```yaml
 branches:
@@ -394,6 +394,8 @@ When the next stabilization cycle is needed, create a fresh `rc` branch from `ma
 ### Using both patterns together
 
 Both policies can coexist in the same config. Use whichever branch fits the situation — long-running feature work on `next`, a targeted stabilization pass on `rc`:
+
+**`.semantic-release.yaml`:**
 
 ```yaml
 branches:
