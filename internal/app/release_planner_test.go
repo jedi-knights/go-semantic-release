@@ -2,6 +2,7 @@ package app_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"go.uber.org/mock/gomock"
@@ -11,6 +12,37 @@ import (
 	"github.com/jedi-knights/go-semantic-release/internal/ports/mocks"
 )
 
+// fakeTagService is a test double for ports.TagService. It decouples counter
+// tests from the number and order of ParseTag calls, verifying output
+// (correct counter value) rather than internal call sequence.
+type fakeTagService struct {
+	parsed map[string]fakeParsed  // tag name → parse result
+	latest map[string]*domain.Tag // project → latest tag
+}
+
+type fakeParsed struct {
+	project string
+	version domain.Version
+}
+
+func (f *fakeTagService) ParseTag(name string) (string, domain.Version, error) {
+	if p, ok := f.parsed[name]; ok {
+		return p.project, p.version, nil
+	}
+	return "", domain.Version{}, fmt.Errorf("unknown tag %q", name)
+}
+
+func (f *fakeTagService) FindLatestTag(_ []domain.Tag, project string) (*domain.Tag, error) {
+	if t, ok := f.latest[project]; ok {
+		return t, nil
+	}
+	return nil, nil
+}
+
+func (f *fakeTagService) FormatTag(_ string, _ domain.Version) (string, error) {
+	return "", fmt.Errorf("fakeTagService.FormatTag not implemented")
+}
+
 func TestReleasePlanner_Plan_RepoMode(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
@@ -19,7 +51,7 @@ func TestReleasePlanner_Plan_RepoMode(t *testing.T) {
 	mockVersion := mocks.NewMockVersionCalculator(ctrl)
 	mockImpact := mocks.NewMockProjectImpactAnalyzer(ctrl)
 	mockLogger := mocks.NewMockLogger(ctrl)
-	mockLogger.EXPECT().Debug(gomock.Any(), gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
 
 	tags := []domain.Tag{{Name: "v1.0.0", Hash: "abc123"}}
@@ -31,7 +63,7 @@ func TestReleasePlanner_Plan_RepoMode(t *testing.T) {
 
 	commits := []domain.Commit{{Type: "feat", Description: "add feature"}}
 	mockVersion.EXPECT().Calculate(
-		domain.NewVersion(1, 0, 0), commits, gomock.Nil(), gomock.Any(),
+		domain.NewVersion(1, 0, 0), commits, gomock.Nil(), gomock.Any(), 0,
 	).Return(domain.NewVersion(1, 1, 0), domain.ReleaseMinor, nil)
 
 	planner := app.NewReleasePlanner(mockGit, mockTag, mockVersion, mockImpact, mockLogger, domain.DefaultCommitTypeMapping())
@@ -65,7 +97,7 @@ func TestReleasePlanner_Plan_RepoMode_WithTagPrefix(t *testing.T) {
 	mockVersion := mocks.NewMockVersionCalculator(ctrl)
 	mockImpact := mocks.NewMockProjectImpactAnalyzer(ctrl)
 	mockLogger := mocks.NewMockLogger(ctrl)
-	mockLogger.EXPECT().Debug(gomock.Any(), gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
 
 	tags := []domain.Tag{{Name: "sun-neovim/v0.1.0", Hash: "abc123"}}
@@ -79,7 +111,7 @@ func TestReleasePlanner_Plan_RepoMode_WithTagPrefix(t *testing.T) {
 
 	commits := []domain.Commit{{Type: "fix", Description: "fix crash"}}
 	mockVersion.EXPECT().Calculate(
-		domain.NewVersion(0, 1, 0), commits, gomock.Nil(), gomock.Any(),
+		domain.NewVersion(0, 1, 0), commits, gomock.Nil(), gomock.Any(), 0,
 	).Return(domain.NewVersion(0, 1, 1), domain.ReleasePatch, nil)
 
 	planner := app.NewReleasePlanner(mockGit, mockTag, mockVersion, mockImpact, mockLogger, domain.DefaultCommitTypeMapping())
@@ -111,7 +143,7 @@ func TestReleasePlanner_Plan_IndependentMode(t *testing.T) {
 	mockVersion := mocks.NewMockVersionCalculator(ctrl)
 	mockImpact := mocks.NewMockProjectImpactAnalyzer(ctrl)
 	mockLogger := mocks.NewMockLogger(ctrl)
-	mockLogger.EXPECT().Debug(gomock.Any(), gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
 
 	tags := []domain.Tag{
@@ -143,11 +175,11 @@ func TestReleasePlanner_Plan_IndependentMode(t *testing.T) {
 	mockImpact.EXPECT().Analyze(projects, commits).Return(impactMap)
 
 	mockVersion.EXPECT().Calculate(
-		domain.NewVersion(1, 0, 0), impactMap["api"], gomock.Nil(), gomock.Any(),
+		domain.NewVersion(1, 0, 0), impactMap["api"], gomock.Nil(), gomock.Any(), 0,
 	).Return(domain.NewVersion(1, 1, 0), domain.ReleaseMinor, nil)
 
 	mockVersion.EXPECT().Calculate(
-		domain.NewVersion(2, 0, 0), impactMap["worker"], gomock.Nil(), gomock.Any(),
+		domain.NewVersion(2, 0, 0), impactMap["worker"], gomock.Nil(), gomock.Any(), 0,
 	).Return(domain.NewVersion(2, 0, 1), domain.ReleasePatch, nil)
 
 	planner := app.NewReleasePlanner(mockGit, mockTag, mockVersion, mockImpact, mockLogger, domain.DefaultCommitTypeMapping())
@@ -181,7 +213,7 @@ func TestReleasePlanner_Plan_IndependentMode_DoesNotReanalyzeReleasedCommits(t *
 	mockVersion := mocks.NewMockVersionCalculator(ctrl)
 	mockImpact := mocks.NewMockProjectImpactAnalyzer(ctrl)
 	mockLogger := mocks.NewMockLogger(ctrl)
-	mockLogger.EXPECT().Debug(gomock.Any(), gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
 
 	// Simulate: three commits in history (newest first).
@@ -214,7 +246,7 @@ func TestReleasePlanner_Plan_IndependentMode_DoesNotReanalyzeReleasedCommits(t *
 	// for tag-sha), the version calculator must receive an empty commit slice.
 	// An empty slice means no releasable changes → no bump.
 	mockVersion.EXPECT().Calculate(
-		domain.NewVersion(1, 0, 0), []domain.Commit{}, gomock.Nil(), gomock.Any(),
+		domain.NewVersion(1, 0, 0), []domain.Commit{}, gomock.Nil(), gomock.Any(), 0,
 	).Return(domain.NewVersion(1, 0, 0), domain.ReleaseNone, nil)
 
 	planner := app.NewReleasePlanner(mockGit, mockTag, mockVersion, mockImpact, mockLogger, domain.DefaultCommitTypeMapping())
@@ -240,7 +272,7 @@ func TestReleasePlanner_Plan_NoReleasable(t *testing.T) {
 	mockVersion := mocks.NewMockVersionCalculator(ctrl)
 	mockImpact := mocks.NewMockProjectImpactAnalyzer(ctrl)
 	mockLogger := mocks.NewMockLogger(ctrl)
-	mockLogger.EXPECT().Debug(gomock.Any(), gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
 
 	mockGit.EXPECT().ListTags(gomock.Any()).Return(nil, nil)
@@ -249,7 +281,7 @@ func TestReleasePlanner_Plan_NoReleasable(t *testing.T) {
 
 	commits := []domain.Commit{{Type: "chore"}}
 	mockVersion.EXPECT().Calculate(
-		domain.ZeroVersion(), commits, gomock.Nil(), gomock.Any(),
+		domain.ZeroVersion(), commits, gomock.Nil(), gomock.Any(), 0,
 	).Return(domain.ZeroVersion(), domain.ReleaseNone, nil)
 
 	planner := app.NewReleasePlanner(mockGit, mockTag, mockVersion, mockImpact, mockLogger, domain.DefaultCommitTypeMapping())
@@ -261,5 +293,285 @@ func TestReleasePlanner_Plan_NoReleasable(t *testing.T) {
 
 	if plan.HasReleasableProjects() {
 		t.Error("expected no releasable projects")
+	}
+}
+
+// TestReleasePlanner_Plan_Prerelease_CounterStartsAtZero verifies that when no
+// prerelease tags exist for the next base version, the counter passed to
+// VersionCalculator is 0 — producing the first RC tag: v1.1.0-rc.0.
+func TestReleasePlanner_Plan_Prerelease_CounterStartsAtZero(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	mockGit := mocks.NewMockGitRepository(ctrl)
+	mockVersion := mocks.NewMockVersionCalculator(ctrl)
+	mockImpact := mocks.NewMockProjectImpactAnalyzer(ctrl)
+	mockLogger := mocks.NewMockLogger(ctrl)
+	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
+
+	// Only a stable tag exists — no prerelease tags yet.
+	tags := []domain.Tag{{Name: "v1.0.0", Hash: "abc123"}}
+	mockGit.EXPECT().ListTags(gomock.Any()).Return(tags, nil)
+	mockGit.EXPECT().CurrentBranch(gomock.Any()).Return("rc", nil)
+
+	fakeTag := &fakeTagService{
+		parsed: map[string]fakeParsed{
+			"v1.0.0": {project: "", version: domain.NewVersion(1, 0, 0)},
+		},
+		latest: map[string]*domain.Tag{
+			"": {Name: "v1.0.0", Version: domain.NewVersion(1, 0, 0), Hash: "abc123"},
+		},
+	}
+
+	policy := &domain.BranchPolicy{Name: "rc", Prerelease: true, Channel: "rc"}
+	commits := []domain.Commit{{Hash: "c1", Type: "feat", Description: "new feature"}}
+
+	// feat on v1.0.0 → base v1.1.0; no rc tags for v1.1.0 → counter=0.
+	mockVersion.EXPECT().Calculate(
+		domain.NewVersion(1, 0, 0), commits, policy, gomock.Any(), 0,
+	).Return(domain.Version{Major: 1, Minor: 1, Patch: 0, Prerelease: "rc.0"}, domain.ReleaseMinor, nil)
+
+	planner := app.NewReleasePlanner(mockGit, fakeTag, mockVersion, mockImpact, mockLogger, domain.DefaultCommitTypeMapping())
+
+	projects := []domain.Project{{Name: "root", Path: "."}}
+	plan, err := planner.Plan(context.Background(), projects, commits, domain.ReleaseModeRepo, policy, false)
+	if err != nil {
+		t.Fatalf("Plan() error = %v", err)
+	}
+
+	if !plan.HasReleasableProjects() {
+		t.Error("expected releasable project")
+	}
+	want := domain.Version{Major: 1, Minor: 1, Patch: 0, Prerelease: "rc.0"}
+	if !plan.Projects[0].NextVersion.Equal(want) {
+		t.Errorf("next version = %v, want %v", plan.Projects[0].NextVersion, want)
+	}
+}
+
+// TestReleasePlanner_Plan_Prerelease_CounterIncrementsWithExistingTags verifies
+// that when prerelease tags already exist for the next base version, the counter
+// equals the number of existing RC tags — producing the next RC in sequence.
+func TestReleasePlanner_Plan_Prerelease_CounterIncrementsWithExistingTags(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	mockGit := mocks.NewMockGitRepository(ctrl)
+	mockVersion := mocks.NewMockVersionCalculator(ctrl)
+	mockImpact := mocks.NewMockProjectImpactAnalyzer(ctrl)
+	mockLogger := mocks.NewMockLogger(ctrl)
+	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
+
+	// Two existing RC tags for v1.1.0 already exist.
+	tags := []domain.Tag{
+		{Name: "v1.0.0", Hash: "abc"},
+		{Name: "v1.1.0-rc.0", Hash: "def"},
+		{Name: "v1.1.0-rc.1", Hash: "ghi"},
+	}
+	mockGit.EXPECT().ListTags(gomock.Any()).Return(tags, nil)
+	mockGit.EXPECT().CurrentBranch(gomock.Any()).Return("rc", nil)
+
+	// FindLatestTag returns the stable baseline (ignores prerelease in ordering).
+	fakeTag := &fakeTagService{
+		parsed: map[string]fakeParsed{
+			"v1.0.0":      {project: "", version: domain.NewVersion(1, 0, 0)},
+			"v1.1.0-rc.0": {project: "", version: domain.Version{Major: 1, Minor: 1, Patch: 0, Prerelease: "rc.0"}},
+			"v1.1.0-rc.1": {project: "", version: domain.Version{Major: 1, Minor: 1, Patch: 0, Prerelease: "rc.1"}},
+		},
+		latest: map[string]*domain.Tag{
+			"": {Name: "v1.0.0", Version: domain.NewVersion(1, 0, 0), Hash: "abc"},
+		},
+	}
+
+	policy := &domain.BranchPolicy{Name: "rc", Prerelease: true, Channel: "rc"}
+	commits := []domain.Commit{{Hash: "c1", Type: "feat", Description: "another fix"}}
+
+	// feat on v1.0.0 → base v1.1.0; 2 existing rc tags → counter=2.
+	mockVersion.EXPECT().Calculate(
+		domain.NewVersion(1, 0, 0), commits, policy, gomock.Any(), 2,
+	).Return(domain.Version{Major: 1, Minor: 1, Patch: 0, Prerelease: "rc.2"}, domain.ReleaseMinor, nil)
+
+	planner := app.NewReleasePlanner(mockGit, fakeTag, mockVersion, mockImpact, mockLogger, domain.DefaultCommitTypeMapping())
+
+	projects := []domain.Project{{Name: "root", Path: "."}}
+	plan, err := planner.Plan(context.Background(), projects, commits, domain.ReleaseModeRepo, policy, false)
+	if err != nil {
+		t.Fatalf("Plan() error = %v", err)
+	}
+
+	want := domain.Version{Major: 1, Minor: 1, Patch: 0, Prerelease: "rc.2"}
+	if !plan.Projects[0].NextVersion.Equal(want) {
+		t.Errorf("next version = %v, want %v", plan.Projects[0].NextVersion, want)
+	}
+}
+
+// TestReleasePlanner_Plan_Prerelease_CounterResetsOnBaseVersionChange verifies
+// that when a higher-impact commit changes the base version, the counter resets
+// to 0 because no prerelease tags exist for the new base version yet.
+func TestReleasePlanner_Plan_Prerelease_CounterResetsOnBaseVersionChange(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	mockGit := mocks.NewMockGitRepository(ctrl)
+	mockVersion := mocks.NewMockVersionCalculator(ctrl)
+	mockImpact := mocks.NewMockProjectImpactAnalyzer(ctrl)
+	mockLogger := mocks.NewMockLogger(ctrl)
+	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
+
+	// Existing RC tags are for v1.1.0. Incoming commit is a breaking change
+	// → base becomes v2.0.0 → counter resets to 0.
+	tags := []domain.Tag{
+		{Name: "v1.0.0", Hash: "abc"},
+		{Name: "v1.1.0-rc.0", Hash: "def"},
+	}
+	mockGit.EXPECT().ListTags(gomock.Any()).Return(tags, nil)
+	mockGit.EXPECT().CurrentBranch(gomock.Any()).Return("rc", nil)
+
+	fakeTag := &fakeTagService{
+		parsed: map[string]fakeParsed{
+			"v1.0.0":      {project: "", version: domain.NewVersion(1, 0, 0)},
+			"v1.1.0-rc.0": {project: "", version: domain.Version{Major: 1, Minor: 1, Patch: 0, Prerelease: "rc.0"}},
+		},
+		latest: map[string]*domain.Tag{
+			"": {Name: "v1.0.0", Version: domain.NewVersion(1, 0, 0), Hash: "abc"},
+		},
+	}
+
+	policy := &domain.BranchPolicy{Name: "rc", Prerelease: true, Channel: "rc"}
+	commits := []domain.Commit{{Hash: "c1", Type: "feat", IsBreakingChange: true, Description: "breaking change"}}
+
+	// breaking change on v1.0.0 → base v2.0.0; no rc tags for v2.0.0 → counter=0.
+	mockVersion.EXPECT().Calculate(
+		domain.NewVersion(1, 0, 0), commits, policy, gomock.Any(), 0,
+	).Return(domain.Version{Major: 2, Minor: 0, Patch: 0, Prerelease: "rc.0"}, domain.ReleaseMajor, nil)
+
+	planner := app.NewReleasePlanner(mockGit, fakeTag, mockVersion, mockImpact, mockLogger, domain.DefaultCommitTypeMapping())
+
+	projects := []domain.Project{{Name: "root", Path: "."}}
+	plan, err := planner.Plan(context.Background(), projects, commits, domain.ReleaseModeRepo, policy, false)
+	if err != nil {
+		t.Fatalf("Plan() error = %v", err)
+	}
+
+	want := domain.Version{Major: 2, Minor: 0, Patch: 0, Prerelease: "rc.0"}
+	if !plan.Projects[0].NextVersion.Equal(want) {
+		t.Errorf("next version = %v, want %v", plan.Projects[0].NextVersion, want)
+	}
+}
+
+// TestReleasePlanner_Plan_Prerelease_MaintenanceBranchSkipsCounter verifies
+// that a branch which is both prerelease and maintenance does not trigger the
+// counter lookup. The counter is undefined for maintenance branches because
+// constrainMaintenanceBump may change the base version after nextBaseVersion
+// computes it, causing the counter to target the wrong base version.
+func TestReleasePlanner_Plan_Prerelease_MaintenanceBranchSkipsCounter(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	mockGit := mocks.NewMockGitRepository(ctrl)
+	mockTag := mocks.NewMockTagService(ctrl)
+	mockVersion := mocks.NewMockVersionCalculator(ctrl)
+	mockImpact := mocks.NewMockProjectImpactAnalyzer(ctrl)
+	mockLogger := mocks.NewMockLogger(ctrl)
+	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
+
+	tags := []domain.Tag{{Name: "v1.0.0", Hash: "abc"}}
+	mockGit.EXPECT().ListTags(gomock.Any()).Return(tags, nil)
+	mockGit.EXPECT().CurrentBranch(gomock.Any()).Return("1.x", nil)
+
+	latestTag := &domain.Tag{Name: "v1.0.0", Version: domain.NewVersion(1, 0, 0), Hash: "abc"}
+	mockTag.EXPECT().FindLatestTag(tags, "").Return(latestTag, nil)
+	// ParseTag must NOT be called — maintenance branches skip the counter path.
+
+	// Policy is both prerelease and maintenance.
+	policy := &domain.BranchPolicy{
+		Name:       "1.x",
+		Prerelease: true,
+		Channel:    "rc",
+		Range:      "1.x",
+		Type:       domain.BranchTypeMaintenance,
+	}
+	commits := []domain.Commit{{Hash: "c1", Type: "fix", Description: "patch fix"}}
+
+	// Counter must be 0 — no lookup performed.
+	mockVersion.EXPECT().Calculate(
+		domain.NewVersion(1, 0, 0), commits, policy, gomock.Any(), 0,
+	).Return(domain.Version{Major: 1, Minor: 0, Patch: 1, Prerelease: "rc.0"}, domain.ReleasePatch, nil)
+
+	planner := app.NewReleasePlanner(mockGit, mockTag, mockVersion, mockImpact, mockLogger, domain.DefaultCommitTypeMapping())
+
+	projects := []domain.Project{{Name: "root", Path: "."}}
+	plan, err := planner.Plan(context.Background(), projects, commits, domain.ReleaseModeRepo, policy, false)
+	if err != nil {
+		t.Fatalf("Plan() error = %v", err)
+	}
+
+	if !plan.HasReleasableProjects() {
+		t.Error("expected releasable project")
+	}
+}
+
+// TestReleasePlanner_Plan_RepoMode_FindLatestTagError verifies that an error
+// from FindLatestTag is propagated and Plan returns an error rather than
+// silently treating a failed lookup as "no prior tag".
+func TestReleasePlanner_Plan_RepoMode_FindLatestTagError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	mockGit := mocks.NewMockGitRepository(ctrl)
+	mockTag := mocks.NewMockTagService(ctrl)
+	mockVersion := mocks.NewMockVersionCalculator(ctrl)
+	mockImpact := mocks.NewMockProjectImpactAnalyzer(ctrl)
+	mockLogger := mocks.NewMockLogger(ctrl)
+	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
+
+	tags := []domain.Tag{{Name: "v1.0.0", Hash: "abc"}}
+	mockGit.EXPECT().ListTags(gomock.Any()).Return(tags, nil)
+	mockGit.EXPECT().CurrentBranch(gomock.Any()).Return("main", nil)
+
+	mockTag.EXPECT().FindLatestTag(tags, "").Return(nil, fmt.Errorf("tag service unavailable"))
+	// Calculate must NOT be called when FindLatestTag errors.
+
+	planner := app.NewReleasePlanner(mockGit, mockTag, mockVersion, mockImpact, mockLogger, domain.DefaultCommitTypeMapping())
+
+	projects := []domain.Project{{Name: "root", Path: "."}}
+	commits := []domain.Commit{{Type: "feat"}}
+	_, err := planner.Plan(context.Background(), projects, commits, domain.ReleaseModeRepo, nil, false)
+	if err == nil {
+		t.Fatal("expected error from FindLatestTag, got nil")
+	}
+}
+
+// TestReleasePlanner_Plan_IndependentMode_FindLatestTagError verifies that a
+// FindLatestTag error in independent mode is propagated rather than silently
+// treated as "no prior tag", which would cause versioning to restart from zero.
+func TestReleasePlanner_Plan_IndependentMode_FindLatestTagError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	mockGit := mocks.NewMockGitRepository(ctrl)
+	mockTag := mocks.NewMockTagService(ctrl)
+	mockVersion := mocks.NewMockVersionCalculator(ctrl)
+	mockImpact := mocks.NewMockProjectImpactAnalyzer(ctrl)
+	mockLogger := mocks.NewMockLogger(ctrl)
+	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
+
+	tags := []domain.Tag{{Name: "api/v1.0.0", Hash: "abc"}}
+	mockGit.EXPECT().ListTags(gomock.Any()).Return(tags, nil)
+	mockGit.EXPECT().CurrentBranch(gomock.Any()).Return("main", nil)
+
+	projects := []domain.Project{{Name: "api", Path: "services/api"}}
+	commits := []domain.Commit{{Hash: "c1", Type: "feat", FilesChanged: []string{"services/api/main.go"}}}
+
+	impactMap := map[string][]domain.Commit{"api": {commits[0]}}
+	mockImpact.EXPECT().Analyze(projects, commits).Return(impactMap)
+
+	mockTag.EXPECT().FindLatestTag(tags, "api").Return(nil, fmt.Errorf("tag service unavailable"))
+	// Calculate must NOT be called when FindLatestTag errors.
+
+	planner := app.NewReleasePlanner(mockGit, mockTag, mockVersion, mockImpact, mockLogger, domain.DefaultCommitTypeMapping())
+
+	_, err := planner.Plan(context.Background(), projects, commits, domain.ReleaseModeIndependent, nil, false)
+	if err == nil {
+		t.Fatal("expected error from FindLatestTag in independent mode, got nil")
 	}
 }

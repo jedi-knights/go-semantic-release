@@ -9,6 +9,17 @@ import (
 	"github.com/jedi-knights/go-semantic-release/internal/ports"
 )
 
+// nextBaseVersion computes the bumped Major.Minor.Patch for the given commits
+// without applying any prerelease suffix. Used by the planner to determine
+// which base version to search for when counting existing prerelease tags.
+func nextBaseVersion(current domain.Version, commits []domain.Commit, typeMapping map[string]domain.ReleaseType) domain.Version {
+	bump := aggregateBump(commits, typeMapping)
+	if !bump.IsReleasable() {
+		return current
+	}
+	return current.Bump(bump)
+}
+
 // ReleasePlanner builds a release plan for the repository.
 type ReleasePlanner struct {
 	git            ports.GitRepository
@@ -59,6 +70,8 @@ func (p *ReleasePlanner) Plan(
 
 	if branch, err := p.git.CurrentBranch(ctx); err == nil {
 		plan.Branch = branch
+	} else {
+		p.logger.Warn("could not determine current branch", "error", err)
 	}
 
 	if releaseMode == domain.ReleaseModeIndependent {
@@ -82,7 +95,10 @@ func (p *ReleasePlanner) planRepo(
 	if len(projects) > 0 && projects[0].TagPrefix != "" {
 		tagLookupPrefix = strings.TrimSuffix(projects[0].TagPrefix, "/")
 	}
-	latestTag, _ := p.tagService.FindLatestTag(tags, tagLookupPrefix)
+	latestTag, err := p.tagService.FindLatestTag(tags, tagLookupPrefix)
+	if err != nil {
+		return nil, fmt.Errorf("finding latest tag: %w", err)
+	}
 	currentVersion := domain.ZeroVersion()
 
 	if latestTag != nil {
@@ -92,7 +108,13 @@ func (p *ReleasePlanner) planRepo(
 		commits = commitsAfterHash(commits, buildCommitIndex(commits), latestTag.Hash)
 	}
 
-	nextVersion, releaseType, err := p.versionCalc.Calculate(currentVersion, commits, policy, p.typeMapping)
+	counter := 0
+	if policy != nil && policy.IsPrerelease() && !policy.IsMaintenance() {
+		base := nextBaseVersion(currentVersion, commits, p.typeMapping)
+		counter = p.countPrereleaseTags(tags, tagLookupPrefix, base, policy.Channel)
+	}
+
+	nextVersion, releaseType, err := p.versionCalc.Calculate(currentVersion, commits, policy, p.typeMapping, counter)
 	if err != nil {
 		return nil, fmt.Errorf("calculating version: %w", err)
 	}
@@ -128,10 +150,15 @@ func (p *ReleasePlanner) planIndependent(
 
 	impactMap := p.impactAnalyzer.Analyze(projects, commits)
 
+	plan.Projects = make([]domain.ProjectReleasePlan, 0, len(projects))
+
 	for _, proj := range projects {
 		projectCommits := impactMap[proj.Name]
 
-		latestTag, _ := p.tagService.FindLatestTag(tags, proj.Name)
+		latestTag, err := p.tagService.FindLatestTag(tags, proj.Name)
+		if err != nil {
+			return nil, domain.NewProjectError(proj.Name, "find latest tag", err)
+		}
 		currentVersion := domain.ZeroVersion()
 		if latestTag != nil {
 			currentVersion = latestTag.Version
@@ -140,7 +167,13 @@ func (p *ReleasePlanner) planIndependent(
 			projectCommits = commitsAfterHash(projectCommits, commitIndex, latestTag.Hash)
 		}
 
-		nextVersion, releaseType, err := p.versionCalc.Calculate(currentVersion, projectCommits, policy, p.typeMapping)
+		counter := 0
+		if policy != nil && policy.IsPrerelease() && !policy.IsMaintenance() {
+			base := nextBaseVersion(currentVersion, projectCommits, p.typeMapping)
+			counter = p.countPrereleaseTags(tags, proj.Name, base, policy.Channel)
+		}
+
+		nextVersion, releaseType, err := p.versionCalc.Calculate(currentVersion, projectCommits, policy, p.typeMapping, counter)
 		if err != nil {
 			return nil, domain.NewProjectError(proj.Name, "calculate version", err)
 		}
@@ -157,6 +190,38 @@ func (p *ReleasePlanner) planIndependent(
 	}
 
 	return plan, nil
+}
+
+// countPrereleaseTags counts existing prerelease tags for a specific project,
+// base version (Major.Minor.Patch), and channel. The result is used as the
+// counter N in the {channel}.{N} prerelease suffix so each RC tag in a cycle
+// is unique and increments automatically.
+//
+// Matching rule: the prerelease field must begin with "{channel}." — the dot
+// boundary prevents a channel named "rc" from matching a hand-crafted tag
+// whose prerelease starts with "rca" or similar. Tags whose prerelease contains
+// additional dot-separated segments (e.g. "rc.1.2") are accepted as valid
+// counter tags; this is intentional to remain compatible with any tooling that
+// writes counters in the legacy format.
+func (p *ReleasePlanner) countPrereleaseTags(tags []domain.Tag, project string, base domain.Version, channel string) int {
+	prefix := channel + "."
+	count := 0
+	for _, tag := range tags {
+		proj, ver, err := p.tagService.ParseTag(tag.Name)
+		if err != nil {
+			continue
+		}
+		if proj != project {
+			continue
+		}
+		if ver.Major != base.Major || ver.Minor != base.Minor || ver.Patch != base.Patch {
+			continue
+		}
+		if strings.HasPrefix(ver.Prerelease, prefix) {
+			count++
+		}
+	}
+	return count
 }
 
 func buildReason(rt domain.ReleaseType, commitCount int) string {
