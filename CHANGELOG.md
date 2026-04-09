@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.8 (2026-04-09)
+
+### Bug Fixes
+
+- **planner:** use TagPrefix for baseline tag lookup in repo mode (4199a24)
+- **planner:** use project name in repo-mode tag baseline lookup (f2c83cb)
+
 ## 0.8.7 (2026-04-09)
 
 ### Bug Fixes
