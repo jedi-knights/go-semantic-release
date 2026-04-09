@@ -145,11 +145,24 @@ func (r *Repository) FilesChangedInCommit(ctx context.Context, hash string) ([]s
 }
 
 func (r *Repository) CreateTag(ctx context.Context, name, hash, message string) error {
+	var err error
 	if message != "" {
-		_, err := r.run(ctx, "tag", "-a", name, hash, "-m", message)
-		return err
+		_, err = r.run(ctx, "tag", "-a", name, hash, "-m", message)
+	} else {
+		_, err = r.run(ctx, "tag", name, hash)
 	}
-	_, err := r.run(ctx, "tag", name, hash)
+	if err == nil {
+		return nil
+	}
+	// When the tag already exists, check whether it resolves to the same commit.
+	// If it does, the operation is idempotent — return ErrTagAlreadyExists so
+	// the caller can handle the re-run case without treating it as a hard failure.
+	if strings.Contains(err.Error(), "already exists") {
+		existing, resolveErr := r.run(ctx, "rev-parse", name+"^{commit}")
+		if resolveErr == nil && existing == hash {
+			return domain.ErrTagAlreadyExists
+		}
+	}
 	return err
 }
 

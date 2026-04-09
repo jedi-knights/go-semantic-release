@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/jedi-knights/go-semantic-release/internal/domain"
@@ -161,7 +162,12 @@ func (e *ReleaseExecutor) createAndPushTag(ctx context.Context, tagName, message
 	}
 
 	if err := e.git.CreateTag(ctx, tagName, headHash, message); err != nil {
-		return domain.NewReleaseError("create-tag", err)
+		if !errors.Is(err, domain.ErrTagAlreadyExists) {
+			return domain.NewReleaseError("create-tag", err)
+		}
+		// Tag already exists at this commit — idempotent re-run.
+		// Still push in case the tag was created locally but not yet pushed.
+		e.logger.Info("tag already exists at current commit, skipping create", "tag", tagName)
 	}
 
 	if err := e.git.PushTag(ctx, tagName); err != nil {

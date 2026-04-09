@@ -2,6 +2,7 @@ package gogit
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -163,6 +164,18 @@ func (r *Repository) CreateTag(_ context.Context, name, hash, message string) er
 				When:  time.Now(),
 			},
 		})
+		if err == nil {
+			return nil
+		}
+		if errors.Is(err, git.ErrTagExists) {
+			// Use the peel suffix "^{}" to dereference the annotated tag object
+			// to the underlying commit hash; without it ResolveRevision returns
+			// the tag object hash, which never matches the commit hash argument.
+			resolved, resolveErr := r.repo.ResolveRevision(plumbing.Revision("refs/tags/" + name + "^{}"))
+			if resolveErr == nil && resolved.String() == hash {
+				return domain.ErrTagAlreadyExists
+			}
+		}
 		return err
 	}
 
@@ -182,10 +195,13 @@ func (r *Repository) PushTag(_ context.Context, name string) error {
 		RefSpecs:   []config.RefSpec{refSpec},
 		Auth:       auth,
 	})
-	if err != nil {
-		return fmt.Errorf("pushing tag %s: %w", name, err)
+	// NoErrAlreadyUpToDate is a non-nil sentinel that go-git returns when the
+	// remote already has the ref at the same SHA. Treat it as success so that
+	// re-runs (where the tag was already pushed in a prior attempt) do not fail.
+	if err == nil || errors.Is(err, git.NoErrAlreadyUpToDate) {
+		return nil
 	}
-	return nil
+	return fmt.Errorf("pushing tag %s: %w", name, err)
 }
 
 // HeadHash returns the hash of HEAD.
