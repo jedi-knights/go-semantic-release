@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.0 (2026-04-09)
+
+### Features
+
+- **planner:** add angular-style release candidate tagging (13bf80c)
+
 ## 0.8.8 (2026-04-09)
 
 ### Bug Fixes
