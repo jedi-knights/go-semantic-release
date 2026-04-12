@@ -49,3 +49,31 @@ func TestNoopPrompter_AlwaysConfirms(t *testing.T) {
 		t.Error("NoopPrompter should always return true")
 	}
 }
+
+func TestNewTerminalPrompter(t *testing.T) {
+	p := prompt.NewTerminalPrompter()
+	if p == nil {
+		t.Fatal("NewTerminalPrompter() returned nil")
+	}
+}
+
+func TestIsTerminal(t *testing.T) {
+	// In a test environment stdin is not a terminal; IsTerminal must not panic.
+	// The result (true or false) is environment-dependent; we only assert it runs.
+	_ = prompt.IsTerminal()
+}
+
+func TestTerminalPrompter_Confirm_EOF(t *testing.T) {
+	// An empty reader simulates EOF on the first Scan — Confirm should return (false, nil).
+	r := strings.NewReader("")
+	w := &bytes.Buffer{}
+	p := prompt.NewTerminalPrompterWithIO(r, w)
+
+	got, err := p.Confirm("Continue?")
+	if err != nil {
+		t.Fatalf("Confirm() on EOF returned error: %v", err)
+	}
+	if got {
+		t.Error("Confirm() on EOF should return false")
+	}
+}

@@ -121,6 +121,21 @@ func TestPathBasedImpactAnalyzer_Analyze(t *testing.T) {
 		}
 	})
 
+	t.Run("file exactly matches project path", func(t *testing.T) {
+		// fileInProject has a branch: `file == projectPath` (exact match without
+		// the trailing "/"). This covers it by passing the project root dir itself
+		// as a changed file, which is unusual but valid (e.g. a renamed directory).
+		exactProjects := []domain.Project{{Name: "api", Path: "services/api"}}
+		exactCommits := []domain.Commit{
+			{Hash: "x1", FilesChanged: []string{"services/api"}},
+		}
+		analyzer := adaptergit.NewPathBasedImpactAnalyzer(false, nil, nil)
+		result := analyzer.Analyze(exactProjects, exactCommits)
+		if len(result["api"]) != 1 {
+			t.Errorf("api commits = %d, want 1 for exact path match", len(result["api"]))
+		}
+	})
+
 	t.Run("glob pattern matching", func(t *testing.T) {
 		fileCommits := []domain.Commit{
 			{Hash: "e1", FilesChanged: []string{"services/api/handler.go"}},

@@ -205,6 +205,18 @@ func TestValidateMaintenanceVersion(t *testing.T) {
 			policy:  domain.BranchPolicy{Name: "main"},
 			wantErr: false,
 		},
+		{
+			// IsMaintenance() is true (Type == BranchTypeMaintenance) but both Range and Name are
+			// invalid — MaintenanceRange() will fail, propagating the parse error.
+			name:    "maintenance policy with unparseable range returns error",
+			version: domain.NewVersion(1, 0, 0),
+			policy: domain.BranchPolicy{
+				Name:  "broken-range",
+				Range: "not-a-range",
+				Type:  domain.BranchTypeMaintenance,
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -214,5 +226,50 @@ func TestValidateMaintenanceVersion(t *testing.T) {
 				t.Errorf("error = %v, wantErr = %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestFindBranchPolicy_GlobMatch(t *testing.T) {
+	// A policy with a glob pattern should match branches that satisfy the pattern.
+	policies := []domain.BranchPolicy{
+		{Name: "release/*", Type: domain.BranchTypeRelease},
+	}
+
+	tests := []struct {
+		name      string
+		branch    string
+		wantFound bool
+	}{
+		{"matching glob", "release/1.0", true},
+		{"non-matching branch", "hotfix/1.0", false},
+		{"exact match in glob policy", "release/2.0", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			policy := domain.FindBranchPolicy(policies, tt.branch)
+			if (policy != nil) != tt.wantFound {
+				t.Errorf("FindBranchPolicy(%q) found=%v, wantFound=%v", tt.branch, policy != nil, tt.wantFound)
+			}
+		})
+	}
+}
+
+func TestParseMaintenanceRange_TooManyParts(t *testing.T) {
+	// A range with 4 parts (e.g. "1.2.3.x") has len(parts)==4 and is not handled
+	// by the 2-part or 3-part branches, so it falls through to the final error return.
+	policy := domain.BranchPolicy{Range: "1.2.3.x"}
+	_, _, err := policy.MaintenanceRange()
+	if err == nil {
+		t.Fatal("expected error for 4-part range like '1.2.3.x', got nil")
+	}
+}
+
+func TestParseMaintenanceRange_NonNumericMinor(t *testing.T) {
+	// A range like "1.abc.x" has a valid major but an invalid minor.
+	policy := domain.BranchPolicy{Range: "1.abc.x"}
+	_, _, err := policy.MaintenanceRange()
+	if err == nil {
+		t.Fatal("expected error for non-numeric minor in range, got nil")
 	}
 }

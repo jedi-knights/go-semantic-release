@@ -73,6 +73,18 @@ BREAKING-CHANGE: return type changed from string to int`,
 			wantBreakingNote: "return type changed from string to int",
 		},
 		{
+			name: "breaking change in footer with body",
+			message: `feat: update authentication
+
+Some body text describing the change in detail.
+
+BREAKING CHANGE: the login endpoint now requires an API key`,
+			wantType:         "feat",
+			wantDescription:  "update authentication",
+			wantBreaking:     true,
+			wantBreakingNote: "the login endpoint now requires an API key",
+		},
+		{
 			name:            "non-conventional commit",
 			message:         "updated the readme file",
 			wantType:        "",

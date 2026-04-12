@@ -184,3 +184,40 @@ func TestVersion_WithPrerelease(t *testing.T) {
 		t.Errorf("String() = %q, want %q", v.String(), "1.2.3-beta.1")
 	}
 }
+
+func TestVersion_TagString(t *testing.T) {
+	tests := []struct {
+		name    string
+		version domain.Version
+		want    string
+	}{
+		{
+			name:    "basic version",
+			version: domain.NewVersion(1, 2, 3),
+			want:    "v1.2.3",
+		},
+		{
+			name:    "with prerelease",
+			version: domain.Version{Major: 1, Minor: 0, Patch: 0, Prerelease: "rc.1"},
+			want:    "v1.0.0-rc.1",
+		},
+		{
+			name:    "zero version",
+			version: domain.ZeroVersion(),
+			want:    "v0.0.0",
+		},
+		{
+			name:    "with build metadata",
+			version: domain.Version{Major: 2, Minor: 3, Patch: 4, Build: "sha.abc"},
+			want:    "v2.3.4+sha.abc",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.version.TagString(); got != tt.want {
+				t.Errorf("TagString() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
