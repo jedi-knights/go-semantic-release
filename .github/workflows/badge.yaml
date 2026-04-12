@@ -39,12 +39,14 @@ jobs:
           go test ./... -coverprofile=coverage.out -covermode=atomic
           mkdir -p htmlcov
           go tool cover -html=coverage.out -o htmlcov/index.html
+          go run github.com/boumenot/gocover-cobertura@latest < coverage.out > coverage.xml
         shell: bash
 
       - name: Update Coverage Badge
         uses: jedi-knights/coverage-badge@v0
         with:
           badge-label: Coverage
+          coverage-file: coverage.xml
           report-url: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/?v=${{ github.run_number }}
 
       - name: Commit badge
