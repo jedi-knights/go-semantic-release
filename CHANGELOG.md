@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.1 (2026-04-12)
+
+### Bug Fixes
+
+- **badge:** convert coverage.out to cobertura xml for badge action (1686618)
+
 ## 0.9.0 (2026-04-09)
 
 ### Features
