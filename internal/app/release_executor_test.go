@@ -267,6 +267,53 @@ func TestReleaseExecutor_Execute_TagAlreadyExists(t *testing.T) {
 	}
 }
 
+// TestMustNewReleaseExecutor_PanicsOnNilArgs verifies that each nil argument
+// causes an immediate panic so callers catch wiring mistakes at startup rather
+// than at runtime.
+func TestMustNewReleaseExecutor_PanicsOnNilArgs(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+
+	validGit := mocks.NewMockGitRepository(ctrl)
+	validTag := mocks.NewMockTagService(ctrl)
+	validChangelog := mocks.NewMockChangelogGenerator(ctrl)
+	validPublisher := mocks.NewMockReleasePublisher(ctrl)
+	validLogger := mocks.NewMockLogger(ctrl)
+
+	cases := []struct {
+		name string
+		fn   func()
+	}{
+		{"nil git", func() {
+			app.MustNewReleaseExecutor(nil, validTag, validChangelog, validPublisher, validLogger, nil)
+		}},
+		{"nil tagService", func() {
+			app.MustNewReleaseExecutor(validGit, nil, validChangelog, validPublisher, validLogger, nil)
+		}},
+		{"nil changelog", func() {
+			app.MustNewReleaseExecutor(validGit, validTag, nil, validPublisher, validLogger, nil)
+		}},
+		{"nil publisher", func() {
+			app.MustNewReleaseExecutor(validGit, validTag, validChangelog, nil, validLogger, nil)
+		}},
+		{"nil logger", func() {
+			app.MustNewReleaseExecutor(validGit, validTag, validChangelog, validPublisher, nil, nil)
+		}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			defer func() {
+				if r := recover(); r == nil {
+					t.Errorf("MustNewReleaseExecutor(%s): expected panic, got none", tc.name)
+				}
+			}()
+			tc.fn()
+		})
+	}
+}
+
 // TestReleaseExecutor_Execute_TagAlreadyExists_PushAlreadyOnRemote covers the
 // full re-run scenario: tag was already created AND already pushed to the
 // remote in a prior workflow attempt. The adapter is responsible for

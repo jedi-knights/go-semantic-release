@@ -187,3 +187,199 @@ func TestPipeline_Execute_FullRelease(t *testing.T) {
 		t.Errorf("expected 1 project result, got %d", len(rc.Result.Projects))
 	}
 }
+
+// verifyReleasePlugin extends compositePlugin with VerifyRelease support.
+type verifyReleasePlugin struct {
+	compositePlugin
+	verifyReleaseErr error
+}
+
+func (p *verifyReleasePlugin) VerifyRelease(_ context.Context, _ *domain.ReleaseContext) error {
+	return p.verifyReleaseErr
+}
+
+func TestPipeline_Execute_VerifyReleaseFailure(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockLogger := mocks.NewMockLogger(ctrl)
+	mockLogger.EXPECT().Debug(gomock.Any(), gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any()).AnyTimes()
+
+	plugin := &verifyReleasePlugin{
+		compositePlugin: compositePlugin{
+			name:          "test",
+			analyzeResult: domain.ReleaseMinor,
+		},
+		verifyReleaseErr: errors.New("release blocked by policy"),
+	}
+
+	pipeline := app.NewPipeline([]ports.Plugin{plugin}, mockLogger)
+	rc := &domain.ReleaseContext{}
+
+	err := pipeline.Execute(context.Background(), rc)
+	if err == nil {
+		t.Fatal("expected error from verifyRelease failure, got nil")
+	}
+	if !plugin.failCalled {
+		t.Error("Fail() should have been called when verifyRelease fails")
+	}
+}
+
+func TestPipeline_Execute_GenerateNotesError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockLogger := mocks.NewMockLogger(ctrl)
+	mockLogger.EXPECT().Debug(gomock.Any(), gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any()).AnyTimes()
+
+	plugin := &compositePlugin{
+		name:          "test",
+		analyzeResult: domain.ReleaseMinor,
+		generateErr:   errors.New("notes generation failed"),
+	}
+
+	pipeline := app.NewPipeline([]ports.Plugin{plugin}, mockLogger)
+	rc := &domain.ReleaseContext{}
+
+	err := pipeline.Execute(context.Background(), rc)
+	if err == nil {
+		t.Fatal("expected error from generateNotes failure, got nil")
+	}
+	if !plugin.failCalled {
+		t.Error("Fail() should have been called when generateNotes fails")
+	}
+}
+
+func TestPipeline_Execute_PrepareError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockLogger := mocks.NewMockLogger(ctrl)
+	mockLogger.EXPECT().Debug(gomock.Any(), gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any()).AnyTimes()
+
+	plugin := &compositePlugin{
+		name:           "test",
+		analyzeResult:  domain.ReleaseMinor,
+		generateResult: "## 1.1.0",
+		prepareErr:     errors.New("prepare step failed"),
+	}
+
+	pipeline := app.NewPipeline([]ports.Plugin{plugin}, mockLogger)
+	rc := &domain.ReleaseContext{}
+
+	err := pipeline.Execute(context.Background(), rc)
+	if err == nil {
+		t.Fatal("expected error from prepare failure, got nil")
+	}
+	if !plugin.failCalled {
+		t.Error("Fail() should have been called when prepare fails")
+	}
+}
+
+// addChannelPlugin exercises the addChannel non-fatal path.
+// It implements AnalyzeCommits, GenerateNotes, Prepare, Publish, AddChannel, Success, and Fail.
+type addChannelPlugin struct {
+	name           string
+	analyzeResult  domain.ReleaseType
+	generateResult string
+	addChannelErr  error
+	successCalled  bool
+	failCalled     bool
+}
+
+func (p *addChannelPlugin) Name() string { return p.name }
+
+func (p *addChannelPlugin) AnalyzeCommits(_ context.Context, _ *domain.ReleaseContext) (domain.ReleaseType, error) {
+	return p.analyzeResult, nil
+}
+
+func (p *addChannelPlugin) GenerateNotes(_ context.Context, _ *domain.ReleaseContext) (string, error) {
+	return p.generateResult, nil
+}
+
+func (p *addChannelPlugin) Prepare(_ context.Context, _ *domain.ReleaseContext) error {
+	return nil
+}
+
+func (p *addChannelPlugin) Publish(_ context.Context, _ *domain.ReleaseContext) (*domain.ProjectReleaseResult, error) {
+	return nil, nil
+}
+
+func (p *addChannelPlugin) AddChannel(_ context.Context, _ *domain.ReleaseContext) error {
+	return p.addChannelErr
+}
+
+func (p *addChannelPlugin) Success(_ context.Context, _ *domain.ReleaseContext) error {
+	p.successCalled = true
+	return nil
+}
+
+func (p *addChannelPlugin) Fail(_ context.Context, _ *domain.ReleaseContext) error {
+	p.failCalled = true
+	return nil
+}
+
+// TestPipeline_Execute_AddChannelNonFatal verifies that an addChannel failure is non-fatal:
+// the pipeline logs a warning and continues to invoke the success step.
+func TestPipeline_Execute_AddChannelNonFatal(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockLogger := mocks.NewMockLogger(ctrl)
+	mockLogger.EXPECT().Debug(gomock.Any(), gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Info(gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any()).AnyTimes()
+
+	plugin := &addChannelPlugin{
+		name:           "test",
+		analyzeResult:  domain.ReleaseMinor,
+		generateResult: "## 1.1.0\n- feat",
+		addChannelErr:  errors.New("channel add failed"),
+	}
+
+	pipeline := app.NewPipeline([]ports.Plugin{plugin}, mockLogger)
+	rc := &domain.ReleaseContext{
+		Result: &domain.ReleaseResult{},
+	}
+
+	err := pipeline.Execute(context.Background(), rc)
+	if err != nil {
+		t.Fatalf("Execute() should not return error when addChannel fails (non-fatal), got: %v", err)
+	}
+	if !plugin.successCalled {
+		t.Error("Success() should have been called even when addChannel fails")
+	}
+}
+
+// successErrPlugin implements Success with an error to exercise the non-fatal warning path.
+type successErrPlugin struct {
+	compositePlugin
+	successErr error
+}
+
+func (p *successErrPlugin) Success(_ context.Context, _ *domain.ReleaseContext) error {
+	return p.successErr
+}
+
+// TestPipeline_Execute_SuccessNotificationFailure verifies that a Success() error is non-fatal.
+func TestPipeline_Execute_SuccessNotificationFailure(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockLogger := mocks.NewMockLogger(ctrl)
+	mockLogger.EXPECT().Debug(gomock.Any(), gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Info(gomock.Any()).AnyTimes()
+	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any()).AnyTimes()
+
+	plugin := &successErrPlugin{
+		compositePlugin: compositePlugin{
+			name:           "test",
+			analyzeResult:  domain.ReleaseMinor,
+			generateResult: "## 1.1.0",
+		},
+		successErr: errors.New("notification delivery failed"),
+	}
+
+	pipeline := app.NewPipeline([]ports.Plugin{plugin}, mockLogger)
+	rc := &domain.ReleaseContext{}
+
+	err := pipeline.Execute(context.Background(), rc)
+	if err != nil {
+		t.Fatalf("Execute() should not return error when success notification fails (non-fatal), got: %v", err)
+	}
+}

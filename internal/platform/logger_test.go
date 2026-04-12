@@ -91,3 +91,10 @@ func TestConsoleLogger_Warn_SuppressedAboveLevel(t *testing.T) {
 		t.Errorf("Warn at error level should produce no output, got %q", buf.String())
 	}
 }
+
+func TestDefaultLogger(t *testing.T) {
+	l := platform.DefaultLogger()
+	if l == nil {
+		t.Fatal("DefaultLogger() returned nil")
+	}
+}

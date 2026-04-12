@@ -155,3 +155,84 @@ func TestExternalPlugin_InvalidJSONResponse(t *testing.T) {
 		t.Error("VerifyConditions() should return error on invalid JSON response")
 	}
 }
+
+func TestExternalPlugin_VerifyRelease_Success(t *testing.T) {
+	skipIfShellUnavailable(t)
+	script := writeScript(t, "exit 0")
+	p := plugins.NewExternalPlugin("verify-release-ok", script)
+
+	err := p.VerifyRelease(context.Background(), &domain.ReleaseContext{})
+	if err != nil {
+		t.Errorf("VerifyRelease() expected nil error, got %v", err)
+	}
+}
+
+func TestExternalPlugin_VerifyRelease_Failure(t *testing.T) {
+	skipIfShellUnavailable(t)
+	script := writeScript(t, "echo 'release blocked' >&2; exit 1")
+	p := plugins.NewExternalPlugin("verify-release-fail", script)
+
+	err := p.VerifyRelease(context.Background(), &domain.ReleaseContext{})
+	if err == nil {
+		t.Error("VerifyRelease() should return error on non-zero exit")
+	}
+}
+
+func TestExternalPlugin_Prepare_Success(t *testing.T) {
+	skipIfShellUnavailable(t)
+	script := writeScript(t, "exit 0")
+	p := plugins.NewExternalPlugin("prepare-ok", script)
+
+	err := p.Prepare(context.Background(), &domain.ReleaseContext{})
+	if err != nil {
+		t.Errorf("Prepare() expected nil error, got %v", err)
+	}
+}
+
+func TestExternalPlugin_Publish_Success(t *testing.T) {
+	skipIfShellUnavailable(t)
+	// Script exits 0 with no output — invoke returns empty response, Publish returns nil, nil.
+	script := writeScript(t, "exit 0")
+	p := plugins.NewExternalPlugin("publish-ok", script)
+
+	result, err := p.Publish(context.Background(), &domain.ReleaseContext{})
+	if err != nil {
+		t.Errorf("Publish() expected nil error, got %v", err)
+	}
+	if result != nil {
+		t.Errorf("Publish() expected nil result, got %+v", result)
+	}
+}
+
+func TestExternalPlugin_AddChannel_Success(t *testing.T) {
+	skipIfShellUnavailable(t)
+	script := writeScript(t, "exit 0")
+	p := plugins.NewExternalPlugin("add-channel-ok", script)
+
+	err := p.AddChannel(context.Background(), &domain.ReleaseContext{})
+	if err != nil {
+		t.Errorf("AddChannel() expected nil error, got %v", err)
+	}
+}
+
+func TestExternalPlugin_Success_Step(t *testing.T) {
+	skipIfShellUnavailable(t)
+	script := writeScript(t, "exit 0")
+	p := plugins.NewExternalPlugin("success-ok", script)
+
+	err := p.Success(context.Background(), &domain.ReleaseContext{})
+	if err != nil {
+		t.Errorf("Success() expected nil error, got %v", err)
+	}
+}
+
+func TestExternalPlugin_Fail_Step(t *testing.T) {
+	skipIfShellUnavailable(t)
+	script := writeScript(t, "exit 0")
+	p := plugins.NewExternalPlugin("fail-ok", script)
+
+	err := p.Fail(context.Background(), &domain.ReleaseContext{})
+	if err != nil {
+		t.Errorf("Fail() expected nil error, got %v", err)
+	}
+}

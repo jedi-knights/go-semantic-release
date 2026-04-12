@@ -27,6 +27,16 @@ func assertChangelogHeader(t *testing.T, data []byte) {
 	}
 }
 
+func TestPreparePlugin_Name(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	mockFS := mocks.NewMockFileSystem(ctrl)
+	plugin := plugins.NewPreparePlugin(mockFS, noopLogger{}, domain.PrepareConfig{})
+	if got := plugin.Name(); got != "prepare-files" {
+		t.Errorf("Name() = %q, want %q", got, "prepare-files")
+	}
+}
+
 func TestPreparePlugin_UpdateVersionFile(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
