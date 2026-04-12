@@ -36,7 +36,19 @@ jobs:
 
       - name: Generate Coverage Report
         run: |
-          go test ./... -coverprofile=coverage.out -covermode=atomic
+          # Use -coverpkg so tests in one package credit coverage to packages they
+          # call into. Excludes auto-generated mocks and the main cmd binary, which
+          # match what Taskfile.yml measures locally.
+          COVERPKGS=$(go list ./... | grep -v 'ports/mocks\|cmd/semantic-release' | tr '\n' ',')
+          COVERPKGS="${COVERPKGS%,}"
+          go test -coverpkg="$COVERPKGS" ./... -coverprofile=coverage.out -covermode=atomic
+          # Deduplicate blocks that multiple test binaries both cover (take max hit
+          # count per block so the percentage matches `go tool cover -func` locally).
+          awk '
+            /^mode:/ { if (!mode) { print; mode=1 } next }
+            { key=$1 FS $2; if ($3 > counts[key]) { counts[key]=$3; lines[key]=$0 } }
+            END { for (k in lines) print lines[k] }
+          ' coverage.out > coverage_dedup.out && mv coverage_dedup.out coverage.out
           mkdir -p htmlcov
           go tool cover -html=coverage.out -o htmlcov/index.html
           go run github.com/boumenot/gocover-cobertura@latest < coverage.out > coverage.xml
