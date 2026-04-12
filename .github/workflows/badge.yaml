@@ -38,12 +38,20 @@ jobs:
         run: |
           # Exclude auto-generated mocks and the cmd entrypoint — coverage measures
           # production code only. Test files are already excluded by go test itself.
+          go install github.com/boumenot/gocover-cobertura@latest
           go list ./... | grep -v 'ports/mocks\|cmd/semantic-release' | xargs go test -coverprofile=coverage.out -covermode=atomic
-          mkdir -p htmlcov
-          go tool cover -html=coverage.out -o htmlcov/index.html
-          go run github.com/boumenot/gocover-cobertura@latest < coverage.out > coverage.xml
-          # coverage-badge rejects DOCTYPE declarations (XXE guard) — strip it
-          sed -i '/<!DOCTYPE/d' coverage.xml
+          gocover-cobertura < coverage.out | grep -v '<!DOCTYPE' > coverage.xml
+        shell: bash
+
+      - name: Generate HTML Coverage Report
+        run: |
+          dotnet tool install --global dotnet-reportgenerator-globaltool
+          export PATH="$HOME/.dotnet/tools:$PATH"
+          reportgenerator \
+            -reports:coverage.xml \
+            -targetdir:htmlcov \
+            -reporttypes:Html \
+            -title:"go-semantic-release Coverage"
         shell: bash
 
       - name: Update Coverage Badge
