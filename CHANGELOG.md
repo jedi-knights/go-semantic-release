@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.3 (2026-04-12)
+
+### Bug Fixes
+
+- **ci:** exclude generated mocks from coverage measurement (867456b)
+
 ## 0.9.2 (2026-04-12)
 
 ### Bug Fixes
