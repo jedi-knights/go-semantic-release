@@ -74,6 +74,15 @@ tasks:
     cmds:
       - go tool cover -html=coverage.out -o coverage.html
 
+  coverage:pages:
+    desc: Generate HTML coverage report for GitHub Pages deployment
+    deps: [coverage]
+    cmds:
+      - mkdir -p htmlcov
+      - go tool cover -html=coverage.out -o htmlcov/index.html
+    generates:
+      - htmlcov/index.html
+
   ci:
     desc: Run all CI checks
     cmds:
@@ -97,7 +106,7 @@ tasks:
   clean:
     desc: Remove build artifacts
     cmds:
-      - rm -rf {{.BUILD_DIR}} coverage.out coverage.html
+      - rm -rf {{.BUILD_DIR}} coverage.out coverage.html htmlcov
 
   tidy:
     desc: Tidy go modules

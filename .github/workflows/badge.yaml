@@ -1,0 +1,67 @@
+name: Badge
+
+on:
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  badge:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.GH_TOKEN }}
+          ref: main
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Generate Coverage Report
+        run: |
+          go test ./... -coverprofile=coverage.out -covermode=atomic
+          mkdir -p htmlcov
+          go tool cover -html=coverage.out -o htmlcov/index.html
+        shell: bash
+
+      - name: Update Coverage Badge
+        uses: jedi-knights/coverage-badge@v0
+        with:
+          badge-label: Coverage
+          report-url: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/?v=${{ github.run_number }}
+
+      - name: Commit badge
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git diff --quiet README.md || (git add README.md && git commit -m "chore: update coverage badge [skip ci]" && git push)
+        shell: bash
+
+      - name: Upload Pages Artifact
+        if: always()
+        id: upload-artifact
+        uses: actions/upload-pages-artifact@v5.0.0
+        with:
+          path: htmlcov/
+
+      - name: Deploy to GitHub Pages
+        if: always() && steps.upload-artifact.outcome == 'success'
+        id: deploy
+        uses: actions/deploy-pages@v5
