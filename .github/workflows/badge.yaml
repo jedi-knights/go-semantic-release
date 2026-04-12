@@ -40,6 +40,8 @@ jobs:
           mkdir -p htmlcov
           go tool cover -html=coverage.out -o htmlcov/index.html
           go run github.com/boumenot/gocover-cobertura@latest < coverage.out > coverage.xml
+          # coverage-badge rejects DOCTYPE declarations (XXE guard) — strip it
+          sed -i '/<!DOCTYPE/d' coverage.xml
         shell: bash
 
       - name: Update Coverage Badge
