@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.2 (2026-04-12)
+
+### Bug Fixes
+
+- **badge:** strip DOCTYPE declaration from cobertura xml before badge update (cc841da)
+
 ## 0.9.1 (2026-04-12)
 
 ### Bug Fixes
