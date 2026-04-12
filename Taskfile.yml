@@ -61,12 +61,9 @@ tasks:
         GitRepository,CommitParser,ProjectDiscoverer,ProjectImpactAnalyzer,VersionCalculator,ChangelogGenerator,TagService,ReleasePublisher,ConfigProvider,FileSystem,TemplateRenderer,Logger,Clock,Plugin,VerifyConditionsPlugin,AnalyzeCommitsPlugin,VerifyReleasePlugin,GenerateNotesPlugin,PreparePlugin,PublishPlugin,AddChannelPlugin,SuccessPlugin,FailPlugin
 
   coverage:
-    desc: Run tests with coverage report (excludes generated mocks from denominator)
+    desc: Run tests with coverage report (production code only, excludes generated mocks)
     cmds:
-      - |
-        COVERPKGS=$(go list ./... | grep -v 'ports/mocks\|cmd/semantic-release' | tr '\n' ',')
-        COVERPKGS="${COVERPKGS%,}"
-        go test -coverpkg="$COVERPKGS" ./... -coverprofile=coverage.out -covermode=atomic
+      - go list ./... | grep -v 'ports/mocks\|cmd/semantic-release' | xargs go test -coverprofile=coverage.out -covermode=atomic
       - go tool cover -func=coverage.out
     generates:
       - coverage.out

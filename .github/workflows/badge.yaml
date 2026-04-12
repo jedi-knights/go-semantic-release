@@ -36,7 +36,9 @@ jobs:
 
       - name: Generate Coverage Report
         run: |
-          go test ./... -coverprofile=coverage.out -covermode=atomic
+          # Exclude auto-generated mocks and the cmd entrypoint — coverage measures
+          # production code only. Test files are already excluded by go test itself.
+          go list ./... | grep -v 'ports/mocks\|cmd/semantic-release' | xargs go test -coverprofile=coverage.out -covermode=atomic
           mkdir -p htmlcov
           go tool cover -html=coverage.out -o htmlcov/index.html
           go run github.com/boumenot/gocover-cobertura@latest < coverage.out > coverage.xml
