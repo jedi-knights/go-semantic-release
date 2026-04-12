@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.4 (2026-04-12)
+
+### Bug Fixes
+
+- **ci:** replace go tool cover html with ReportGenerator (dc31ce1)
+
 ## 0.9.3 (2026-04-12)
 
 ### Bug Fixes
