@@ -779,6 +779,7 @@ internal/di/             # DI container wiring
 
 - [Conventional Commits](https://www.conventionalcommits.org/) — the commit message specification used to determine release types
 - [Semantic Versioning](https://semver.org/) — the versioning scheme used for releases
+- [Hexagonal Architecture](https://en.wikipedia.org/wiki/Hexagonal_architecture_(software)) — the ports and adapters pattern used in this project's architecture
 
 ## License
 
