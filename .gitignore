@@ -6,7 +6,7 @@ bin/
 *.dylib
 
 # Test artifacts
-coverage*.out
+*.out
 coverage.html
 *.test
 

@@ -128,21 +128,39 @@ type ProjectConfig struct {
 	ChangelogFile string   `mapstructure:"changelog_file"` // per-project changelog filename, relative to the project's path
 }
 
+// GitHubAsset represents a release asset to upload, with an optional display label.
+// Both YAML forms are supported:
+//
+//	# simple string — label is empty
+//	assets:
+//	  - dist/*.tar.gz
+//
+//	# structured — label appears as the download name on the GitHub release page
+//	assets:
+//	  - path: dist/*.tar.gz
+//	    label: Source Tarballs
+type GitHubAsset struct {
+	// Path is a glob pattern (relative to the repository root) matching the files to upload.
+	Path string `mapstructure:"path"`
+	// Label is the display name shown on the GitHub release page. Empty means the filename is used.
+	Label string `mapstructure:"label"`
+}
+
 // GitHubConfig holds GitHub-specific settings.
 type GitHubConfig struct {
 	Owner string `mapstructure:"owner"`
 	Repo  string `mapstructure:"repo"`
 	// Token is the GitHub personal access token. SENSITIVE: do not log this field.
-	Token                  string   `mapstructure:"token"`
-	APIURL                 string   `mapstructure:"api_url"`
-	CreateRelease          bool     `mapstructure:"create_release"`
-	DraftRelease           bool     `mapstructure:"draft_release"`
-	Assets                 []string `mapstructure:"assets"`
-	SuccessComment         string   `mapstructure:"success_comment"`
-	FailComment            string   `mapstructure:"fail_comment"`
-	ReleasedLabels         []string `mapstructure:"released_labels"`
-	FailLabels             []string `mapstructure:"fail_labels"`
-	DiscussionCategoryName string   `mapstructure:"discussion_category_name"`
+	Token                  string        `mapstructure:"token"`
+	APIURL                 string        `mapstructure:"api_url"`
+	CreateRelease          bool          `mapstructure:"create_release"`
+	DraftRelease           bool          `mapstructure:"draft_release"`
+	Assets                 []GitHubAsset `mapstructure:"assets"`
+	SuccessComment         string        `mapstructure:"success_comment"`
+	FailComment            string        `mapstructure:"fail_comment"`
+	ReleasedLabels         []string      `mapstructure:"released_labels"`
+	FailLabels             []string      `mapstructure:"fail_labels"`
+	DiscussionCategoryName string        `mapstructure:"discussion_category_name"`
 }
 
 // AnyProjectDefinesChangelog reports whether any configured project has a per-project changelog_file set.

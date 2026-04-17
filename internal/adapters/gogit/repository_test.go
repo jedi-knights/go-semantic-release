@@ -94,6 +94,7 @@ func runGit(t *testing.T, dir string, args ...string) ([]byte, error) {
 // ---------------------------------------------------------------------------
 
 func TestGoGit_NewRepository_InvalidPath(t *testing.T) {
+	t.Parallel()
 	_, err := gogit.NewRepository("/this/path/does/not/exist")
 	if err == nil {
 		t.Fatal("expected error for non-existent path, got nil")
@@ -105,6 +106,7 @@ func TestGoGit_NewRepository_InvalidPath(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGoGit_HeadHash(t *testing.T) {
+	t.Parallel()
 	repo, dir := newTestRepo(t)
 	hash := addCommit(t, repo, dir, "a.txt", "initial commit")
 
@@ -130,6 +132,7 @@ func TestGoGit_HeadHash(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGoGit_CurrentBranch(t *testing.T) {
+	t.Parallel()
 	repo, dir := newTestRepo(t)
 	// HEAD does not exist until at least one commit is made.
 	addCommit(t, repo, dir, "b.txt", "initial commit")
@@ -154,6 +157,7 @@ func TestGoGit_CurrentBranch(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGoGit_ListTags_Empty(t *testing.T) {
+	t.Parallel()
 	repo, dir := newTestRepo(t)
 	addCommit(t, repo, dir, "c.txt", "initial commit")
 
@@ -172,6 +176,7 @@ func TestGoGit_ListTags_Empty(t *testing.T) {
 }
 
 func TestGoGit_ListTags_WithTags(t *testing.T) {
+	t.Parallel()
 	repo, dir := newTestRepo(t)
 	commitHash := addCommit(t, repo, dir, "d.txt", "initial commit")
 
@@ -203,6 +208,7 @@ func TestGoGit_ListTags_WithTags(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGoGit_CommitsSince_All(t *testing.T) {
+	t.Parallel()
 	repo, dir := newTestRepo(t)
 	addCommit(t, repo, dir, "e1.txt", "first commit")
 	addCommit(t, repo, dir, "e2.txt", "second commit")
@@ -223,6 +229,7 @@ func TestGoGit_CommitsSince_All(t *testing.T) {
 }
 
 func TestGoGit_CommitsSince_Since(t *testing.T) {
+	t.Parallel()
 	repo, dir := newTestRepo(t)
 	h1 := addCommit(t, repo, dir, "f1.txt", "first commit")
 	addCommit(t, repo, dir, "f2.txt", "second commit")
@@ -248,6 +255,7 @@ func TestGoGit_CommitsSince_Since(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGoGit_FilesChangedInCommit(t *testing.T) {
+	t.Parallel()
 	repo, dir := newTestRepo(t)
 	// First commit needed so Stats() has a parent to diff against.
 	addCommit(t, repo, dir, "g_base.txt", "base commit")
@@ -282,6 +290,7 @@ func TestGoGit_FilesChangedInCommit(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGoGit_CreateTag_Lightweight(t *testing.T) {
+	t.Parallel()
 	repo, dir := newTestRepo(t)
 	h := addCommit(t, repo, dir, "h.txt", "initial commit")
 
@@ -307,6 +316,7 @@ func TestGoGit_CreateTag_Lightweight(t *testing.T) {
 }
 
 func TestGoGit_CreateTag_Annotated(t *testing.T) {
+	t.Parallel()
 	repo, dir := newTestRepo(t)
 	h := addCommit(t, repo, dir, "i.txt", "initial commit")
 
@@ -332,6 +342,7 @@ func TestGoGit_CreateTag_Annotated(t *testing.T) {
 }
 
 func TestGoGit_CreateTag_AlreadyExists_SameCommit(t *testing.T) {
+	t.Parallel()
 	repo, dir := newTestRepo(t)
 	h := addCommit(t, repo, dir, "j.txt", "initial commit")
 
@@ -352,11 +363,33 @@ func TestGoGit_CreateTag_AlreadyExists_SameCommit(t *testing.T) {
 	}
 }
 
+func TestGoGit_CreateTag_Lightweight_AlreadyExists(t *testing.T) {
+	t.Parallel()
+	repo, dir := newTestRepo(t)
+	h := addCommit(t, repo, dir, "dup.txt", "initial commit")
+
+	r, err := gogit.NewRepository(dir)
+	if err != nil {
+		t.Fatalf("NewRepository: %v", err)
+	}
+
+	if tagErr := r.CreateTag(context.Background(), "v1.0.0", h.String(), ""); tagErr != nil {
+		t.Fatalf("first CreateTag: %v", tagErr)
+	}
+
+	// Second creation at the same commit must return ErrTagAlreadyExists (not silently overwrite).
+	err = r.CreateTag(context.Background(), "v1.0.0", h.String(), "")
+	if !errors.Is(err, domain.ErrTagAlreadyExists) {
+		t.Errorf("expected ErrTagAlreadyExists for duplicate lightweight tag, got %v", err)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // RemoteURL
 // ---------------------------------------------------------------------------
 
 func TestGoGit_RemoteURL_NoRemote(t *testing.T) {
+	t.Parallel()
 	repo, dir := newTestRepo(t)
 	addCommit(t, repo, dir, "k.txt", "initial commit")
 
@@ -372,6 +405,7 @@ func TestGoGit_RemoteURL_NoRemote(t *testing.T) {
 }
 
 func TestRepository_RemoteURL_WithRemote(t *testing.T) {
+	t.Parallel()
 	repo, dir := newTestRepo(t)
 	addCommit(t, repo, dir, "l.txt", "initial commit")
 
@@ -398,6 +432,7 @@ func TestRepository_RemoteURL_WithRemote(t *testing.T) {
 }
 
 func TestRepository_PushTag_NoRemote(t *testing.T) {
+	t.Parallel()
 	repo, dir := newTestRepo(t)
 	h := addCommit(t, repo, dir, "m.txt", "initial commit")
 
@@ -419,6 +454,7 @@ func TestRepository_PushTag_NoRemote(t *testing.T) {
 }
 
 func TestRepository_CurrentBranch_Detached(t *testing.T) {
+	t.Parallel()
 	repo, dir := newTestRepo(t)
 	h := addCommit(t, repo, dir, "n.txt", "initial commit")
 	// Add a second commit so HEAD can be detached onto the first one.
@@ -471,4 +507,164 @@ func TestRepository_PushTag_WithToken(t *testing.T) {
 	}
 
 	_ = repo
+}
+
+// ---------------------------------------------------------------------------
+// Stage
+// ---------------------------------------------------------------------------
+
+func TestGoGit_Stage_EmptyList(t *testing.T) {
+	t.Parallel()
+	_, dir := newTestRepo(t)
+
+	r, err := gogit.NewRepository(dir)
+	if err != nil {
+		t.Fatalf("NewRepository: %v", err)
+	}
+
+	if err := r.Stage(context.Background(), []string{}); err != nil {
+		t.Errorf("Stage(empty): expected nil, got %v", err)
+	}
+}
+
+func TestGoGit_Stage_StagesFile(t *testing.T) {
+	t.Parallel()
+	repo, dir := newTestRepo(t)
+	addCommit(t, repo, dir, "base.txt", "initial commit")
+
+	// Write a new file without staging it.
+	if err := os.WriteFile(filepath.Join(dir, "staged.txt"), []byte("hello"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	r, err := gogit.NewRepository(dir)
+	if err != nil {
+		t.Fatalf("NewRepository: %v", err)
+	}
+
+	if err := r.Stage(context.Background(), []string{"staged.txt"}); err != nil {
+		t.Fatalf("Stage: %v", err)
+	}
+
+	out, runErr := runGit(t, dir, "diff", "--cached", "--name-only")
+	if runErr != nil {
+		t.Fatalf("git diff --cached: %v\n%s", runErr, out)
+	}
+	if !bytes.Contains(out, []byte("staged.txt")) {
+		t.Errorf("staged.txt not in index; got: %s", out)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Commit
+// ---------------------------------------------------------------------------
+
+func TestGoGit_Commit_CreatesCommit(t *testing.T) {
+	t.Parallel()
+	repo, dir := newTestRepo(t)
+	addCommit(t, repo, dir, "base.txt", "initial commit")
+
+	if err := os.WriteFile(filepath.Join(dir, "commit-me.txt"), []byte("data"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	r, err := gogit.NewRepository(dir)
+	if err != nil {
+		t.Fatalf("NewRepository: %v", err)
+	}
+
+	if err := r.Stage(context.Background(), []string{"commit-me.txt"}); err != nil {
+		t.Fatalf("Stage: %v", err)
+	}
+
+	const msg = "chore(release): 1.0.0"
+	if err := r.Commit(context.Background(), msg); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+
+	out, runErr := runGit(t, dir, "log", "--format=%s", "-1")
+	if runErr != nil {
+		t.Fatalf("git log: %v\n%s", runErr, out)
+	}
+	if !bytes.Contains(out, []byte(msg)) {
+		t.Errorf("commit subject = %q, want %q", bytes.TrimSpace(out), msg)
+	}
+
+	// Verify the hardcoded bot author identity is preserved.
+	authorOut, authorErr := runGit(t, dir, "log", "--format=%ae", "-1")
+	if authorErr != nil {
+		t.Fatalf("git log author: %v\n%s", authorErr, authorOut)
+	}
+	const wantEmail = "semantic-release-bot@users.noreply.github.com"
+	if !bytes.Contains(authorOut, []byte(wantEmail)) {
+		t.Errorf("author email = %q, want %q", bytes.TrimSpace(authorOut), wantEmail)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Push
+// ---------------------------------------------------------------------------
+
+func TestGoGit_Push_NoRemote(t *testing.T) {
+	t.Parallel()
+	repo, dir := newTestRepo(t)
+	addCommit(t, repo, dir, "push.txt", "initial commit")
+
+	r, err := gogit.NewRepository(dir)
+	if err != nil {
+		t.Fatalf("NewRepository: %v", err)
+	}
+
+	if err := r.Push(context.Background()); err == nil {
+		t.Fatal("expected error when no remote configured, got nil")
+	}
+}
+
+func TestGoGit_Push_AlreadyUpToDate(t *testing.T) {
+	t.Parallel()
+	srcRepo, srcDir := newTestRepo(t)
+	addCommit(t, srcRepo, srcDir, "p.txt", "initial commit")
+
+	// Clone using the local source directory as the remote URL — go-git supports
+	// file-path remotes, so origin points to srcDir after clone.
+	cloneDir := t.TempDir()
+	if out, err := runGit(t, srcDir, "clone", srcDir, cloneDir); err != nil {
+		t.Fatalf("git clone: %v\n%s", err, out)
+	}
+
+	r, err := gogit.NewRepository(cloneDir)
+	if err != nil {
+		t.Fatalf("NewRepository: %v", err)
+	}
+
+	// Nothing new to push — must return nil (NoErrAlreadyUpToDate handled internally).
+	if err := r.Push(context.Background()); err != nil {
+		t.Errorf("expected nil for nothing-to-push, got %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// CommitsSince — multi-line message (covers splitMessage body branch)
+// ---------------------------------------------------------------------------
+
+func TestGoGit_CommitsSince_MultilineMessage(t *testing.T) {
+	t.Parallel()
+	repo, dir := newTestRepo(t)
+	addCommit(t, repo, dir, "ml.txt", "subject line\n\nbody text here")
+
+	r, err := gogit.NewRepository(dir)
+	if err != nil {
+		t.Fatalf("NewRepository: %v", err)
+	}
+
+	commits, err := r.CommitsSince(context.Background(), "")
+	if err != nil {
+		t.Fatalf("CommitsSince: %v", err)
+	}
+	if len(commits) != 1 {
+		t.Fatalf("expected 1 commit, got %d", len(commits))
+	}
+	if commits[0].Message != "subject line" {
+		t.Errorf("Message = %q, want %q", commits[0].Message, "subject line")
+	}
 }

@@ -475,3 +475,85 @@ func TestPlugin_Fail_CreatesNewIssue(t *testing.T) {
 		t.Error("expected POST create issue request, did not see one")
 	}
 }
+
+func TestPlugin_Fail_SearchErrorFallsThroughToCreate(t *testing.T) {
+	// When findFailureIssue errors (server returns 500), the error is logged at Debug
+	// and the plugin falls through to create a new issue anyway.
+	t.Parallel()
+	var gotCreateIssue bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/issues"):
+			w.WriteHeader(http.StatusInternalServerError)
+		case r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/issues"):
+			gotCreateIssue = true
+			w.WriteHeader(http.StatusCreated)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	p := github.NewPlugin(baseConfig(srv.URL), noopLogger{})
+	rc := &domain.ReleaseContext{
+		Branch: "main",
+		Error:  errors.New("release pipeline failed"),
+	}
+	if err := p.Fail(context.Background(), rc); err != nil {
+		t.Errorf("Fail() should return nil even when issue search fails, got: %v", err)
+	}
+	if !gotCreateIssue {
+		t.Error("expected createIssue to be called after findFailureIssue error")
+	}
+}
+
+func TestPlugin_Fail_CreateIssueFails(t *testing.T) {
+	// When createIssue gets a non-201 response, Fail returns an error.
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/issues"):
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("[]"))
+		case r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/issues"):
+			w.WriteHeader(http.StatusUnprocessableEntity)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	p := github.NewPlugin(baseConfig(srv.URL), noopLogger{})
+	rc := &domain.ReleaseContext{
+		Branch: "main",
+		Error:  errors.New("release pipeline failed"),
+	}
+	if err := p.Fail(context.Background(), rc); err == nil {
+		t.Fatal("expected error when createIssue fails, got nil")
+	}
+}
+
+func TestPlugin_AddChannel_GetReleaseError(t *testing.T) {
+	// A non-404, non-200 status from the tag-release endpoint makes getReleaseByTag
+	// return an error, which AddChannel wraps and returns.
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/releases/tags/") {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	p := github.NewPlugin(baseConfig(srv.URL), noopLogger{})
+	rc := &domain.ReleaseContext{TagName: "v1.0.0"}
+	err := p.AddChannel(context.Background(), rc)
+	if err == nil {
+		t.Fatal("expected error for 500 on release tag lookup, got nil")
+	}
+	if !strings.Contains(err.Error(), "finding release for tag") {
+		t.Errorf("expected 'finding release for tag' in error, got: %v", err)
+	}
+}

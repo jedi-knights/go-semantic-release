@@ -8,6 +8,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,17 +29,17 @@ var (
 
 // PluginConfig holds configuration for the GitHub plugin.
 type PluginConfig struct {
-	Owner                  string   `mapstructure:"owner"`
-	Repo                   string   `mapstructure:"repo"`
-	Token                  string   `mapstructure:"token"`
-	APIURL                 string   `mapstructure:"api_url"`
-	Assets                 []string `mapstructure:"assets"`
-	DraftRelease           bool     `mapstructure:"draft_release"`
-	DiscussionCategoryName string   `mapstructure:"discussion_category_name"`
-	SuccessComment         string   `mapstructure:"success_comment"`
-	FailComment            string   `mapstructure:"fail_comment"`
-	ReleasedLabels         []string `mapstructure:"released_labels"`
-	FailLabels             []string `mapstructure:"fail_labels"`
+	Owner                  string               `mapstructure:"owner"`
+	Repo                   string               `mapstructure:"repo"`
+	Token                  string               `mapstructure:"token"`
+	APIURL                 string               `mapstructure:"api_url"`
+	Assets                 []domain.GitHubAsset `mapstructure:"assets"`
+	DraftRelease           bool                 `mapstructure:"draft_release"`
+	DiscussionCategoryName string               `mapstructure:"discussion_category_name"`
+	SuccessComment         string               `mapstructure:"success_comment"`
+	FailComment            string               `mapstructure:"fail_comment"`
+	ReleasedLabels         []string             `mapstructure:"released_labels"`
+	FailLabels             []string             `mapstructure:"fail_labels"`
 }
 
 // Plugin implements multiple lifecycle interfaces for GitHub integration.
@@ -150,9 +151,9 @@ func (p *Plugin) Publish(ctx context.Context, rc *domain.ReleaseContext) (*domai
 	}
 
 	// Upload assets.
-	for _, pattern := range p.config.Assets {
-		if err := p.uploadAssetGlob(ctx, releaseResp.ID, pattern); err != nil {
-			p.logger.Warn("failed to upload asset", "pattern", pattern, "error", err)
+	for _, asset := range p.config.Assets {
+		if err := p.uploadAssetGlob(ctx, releaseResp.ID, asset); err != nil {
+			p.logger.Warn("failed to upload asset", "pattern", asset.Path, "error", err)
 		}
 	}
 
@@ -187,7 +188,10 @@ func (p *Plugin) AddChannel(ctx context.Context, rc *domain.ReleaseContext) erro
 	updateBody := map[string]any{
 		"prerelease": isPrerelease,
 	}
-	jsonData, _ := json.Marshal(updateBody)
+	jsonData, err := json.Marshal(updateBody)
+	if err != nil {
+		return fmt.Errorf("marshaling release update: %w", err)
+	}
 
 	url := fmt.Sprintf("%s/repos/%s/%s/releases/%d", p.config.APIURL, p.config.Owner, p.config.Repo, release.ID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, url, bytes.NewReader(jsonData))
@@ -370,21 +374,21 @@ func (p *Plugin) getReleaseByTag(ctx context.Context, tag string) (*ghRelease, e
 	return &release, nil
 }
 
-func (p *Plugin) uploadAssetGlob(ctx context.Context, releaseID int, pattern string) error {
-	matches, err := filepath.Glob(pattern)
+func (p *Plugin) uploadAssetGlob(ctx context.Context, releaseID int, asset domain.GitHubAsset) error {
+	matches, err := filepath.Glob(asset.Path)
 	if err != nil {
-		return fmt.Errorf("globbing %s: %w", pattern, err)
+		return fmt.Errorf("globbing %s: %w", asset.Path, err)
 	}
 
 	for _, path := range matches {
-		if err := p.uploadAsset(ctx, releaseID, path); err != nil {
+		if err := p.uploadAsset(ctx, releaseID, path, asset.Label); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (p *Plugin) uploadAsset(ctx context.Context, releaseID int, filePath string) error {
+func (p *Plugin) uploadAsset(ctx context.Context, releaseID int, filePath, label string) error {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return fmt.Errorf("opening %s: %w", filePath, err)
@@ -402,10 +406,15 @@ func (p *Plugin) uploadAsset(ctx context.Context, releaseID int, filePath string
 		contentType = "application/octet-stream"
 	}
 
-	url := fmt.Sprintf("https://uploads.github.com/repos/%s/%s/releases/%d/assets?name=%s",
-		p.config.Owner, p.config.Repo, releaseID, name)
+	q := neturl.Values{}
+	q.Set("name", name)
+	if label != "" {
+		q.Set("label", label)
+	}
+	uploadURL := fmt.Sprintf("https://uploads.github.com/repos/%s/%s/releases/%d/assets?%s",
+		p.config.Owner, p.config.Repo, releaseID, q.Encode())
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, file)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, uploadURL, file)
 	if err != nil {
 		return fmt.Errorf("creating upload request: %w", err)
 	}
@@ -456,7 +465,10 @@ func (p *Plugin) getPRsForCommit(ctx context.Context, sha string) ([]ghPR, error
 
 func (p *Plugin) commentOnIssue(ctx context.Context, number int, body string) error {
 	payload := map[string]string{"body": body}
-	jsonData, _ := json.Marshal(payload)
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshaling comment: %w", err)
+	}
 
 	url := fmt.Sprintf("%s/repos/%s/%s/issues/%d/comments", p.config.APIURL, p.config.Owner, p.config.Repo, number)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonData))
@@ -482,7 +494,10 @@ func (p *Plugin) addLabelsToIssue(ctx context.Context, number int, labels []stri
 		return
 	}
 	payload := map[string][]string{"labels": labels}
-	jsonData, _ := json.Marshal(payload)
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
 
 	url := fmt.Sprintf("%s/repos/%s/%s/issues/%d/labels", p.config.APIURL, p.config.Owner, p.config.Repo, number)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonData))
@@ -495,7 +510,8 @@ func (p *Plugin) addLabelsToIssue(ctx context.Context, number int, labels []stri
 	if err != nil {
 		return
 	}
-	_ = resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, resp.Body)
 }
 
 func (p *Plugin) findFailureIssue(ctx context.Context, title string) (*ghIssue, error) {
@@ -512,6 +528,11 @@ func (p *Plugin) findFailureIssue(ctx context.Context, title string) (*ghIssue, 
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("listing issues failed (%d): %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
 
 	var issues []ghIssue
 	if err := json.NewDecoder(resp.Body).Decode(&issues); err != nil {
@@ -532,7 +553,10 @@ func (p *Plugin) createIssue(ctx context.Context, title, body string, labels []s
 		"body":   body,
 		"labels": labels,
 	}
-	jsonData, _ := json.Marshal(payload)
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshaling issue: %w", err)
+	}
 
 	url := fmt.Sprintf("%s/repos/%s/%s/issues", p.config.APIURL, p.config.Owner, p.config.Repo)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonData))

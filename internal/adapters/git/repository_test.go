@@ -392,3 +392,69 @@ func TestRepository_RemoteURL_NoRemote(t *testing.T) {
 		t.Fatal("expected error when fetching remote URL from a repo with no remote, got nil")
 	}
 }
+
+func TestRepository_Stage_StagesFiles(t *testing.T) {
+	dir, repo := newTestGitRepo(t)
+	addTestCommit(t, dir, "initial.txt", "init", "chore: initial commit")
+
+	if err := os.WriteFile(filepath.Join(dir, "new.txt"), []byte("content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repo.Stage(context.Background(), []string{"new.txt"}); err != nil {
+		t.Fatalf("Stage: unexpected error: %v", err)
+	}
+
+	out, err := exec.CommandContext(context.Background(), "git", "-C", dir, "diff", "--cached", "--name-only").Output()
+	if err != nil {
+		t.Fatalf("git diff --cached: %v", err)
+	}
+	if !strings.Contains(string(out), "new.txt") {
+		t.Errorf("expected new.txt to be staged, git status output: %q", string(out))
+	}
+}
+
+func TestRepository_Stage_EmptyList(t *testing.T) {
+	_, repo := newTestGitRepo(t)
+	// Stage with an empty file list must be a no-op (no error, no git invocation).
+	if err := repo.Stage(context.Background(), []string{}); err != nil {
+		t.Fatalf("Stage with empty list: unexpected error: %v", err)
+	}
+}
+
+func TestRepository_Commit_CreatesCommit(t *testing.T) {
+	dir, repo := newTestGitRepo(t)
+	addTestCommit(t, dir, "initial.txt", "init", "chore: initial commit")
+
+	if err := os.WriteFile(filepath.Join(dir, "release.txt"), []byte("v1.0.0"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.CommandContext(context.Background(), "git", "-C", dir, "add", "release.txt").CombinedOutput()
+	if err != nil {
+		t.Fatalf("git add: %s: %v", out, err)
+	}
+
+	const msg = "chore(release): v1.0.0 [skip ci]"
+	if commitErr := repo.Commit(context.Background(), msg); commitErr != nil {
+		t.Fatalf("Commit: unexpected error: %v", commitErr)
+	}
+
+	logOut, err := exec.CommandContext(context.Background(), "git", "-C", dir, "log", "--format=%s", "-1").Output()
+	if err != nil {
+		t.Fatalf("git log: %v", err)
+	}
+	if strings.TrimSpace(string(logOut)) != msg {
+		t.Errorf("commit subject = %q, want %q", strings.TrimSpace(string(logOut)), msg)
+	}
+}
+
+func TestRepository_Push_NoRemote(t *testing.T) {
+	dir, repo := newTestGitRepo(t)
+	addTestCommit(t, dir, "README", "hello", "chore: initial commit")
+
+	// Without a configured remote named "origin", Push must return an error.
+	err := repo.Push(context.Background())
+	if err == nil {
+		t.Fatal("expected error when pushing to a repo with no remote, got nil")
+	}
+}

@@ -84,6 +84,10 @@ func loadExtendsFromFile(path string) (domain.Config, error) {
 	return cfg, nil
 }
 
+// loadExtendsFromURL fetches a remote extends config over HTTP.
+// It uses context.Background() because ResolveExtends does not yet accept a
+// context.Context. When ConfigProvider.Load gains a context parameter this
+// function should be updated to accept and forward it.
 func loadExtendsFromURL(rawURL string) (domain.Config, error) {
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, rawURL, http.NoBody)
 	if err != nil {

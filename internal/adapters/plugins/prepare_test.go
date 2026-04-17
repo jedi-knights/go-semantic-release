@@ -707,3 +707,88 @@ func TestPreparePlugin_MultipleVersionFiles(t *testing.T) {
 		t.Fatalf("Prepare() error = %v", err)
 	}
 }
+
+func TestPreparePlugin_VersionFilesTOMLKeyNotFound(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	mockFS := mocks.NewMockFileSystem(ctrl)
+
+	// TOML content has the section but not the target key.
+	pyproject := []byte("[tool.poetry]\nname = \"myproject\"\n")
+	mockFS.EXPECT().ReadFile("/repo/pyproject.toml").Return(pyproject, nil)
+
+	plugin := plugins.NewPreparePlugin(mockFS, noopLogger{}, domain.PrepareConfig{
+		VersionFiles: []string{"pyproject.toml:tool.poetry.version"},
+	})
+
+	rc := &domain.ReleaseContext{
+		RepositoryRoot: "/repo",
+		CurrentProject: &domain.ProjectReleasePlan{
+			NextVersion: domain.NewVersion(2, 0, 0),
+		},
+	}
+
+	err := plugin.Prepare(context.Background(), rc)
+	if err == nil {
+		t.Fatal("expected error when TOML key not found, got nil")
+	}
+	if !strings.Contains(err.Error(), "updating TOML key") {
+		t.Errorf("expected 'updating TOML key' in error, got: %v", err)
+	}
+}
+
+func TestPreparePlugin_VersionFilesWriteError_TOML(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	mockFS := mocks.NewMockFileSystem(ctrl)
+
+	pyproject := []byte("[tool.poetry]\nversion = \"1.0.0\"\n")
+	mockFS.EXPECT().ReadFile("/repo/pyproject.toml").Return(pyproject, nil)
+	mockFS.EXPECT().WriteFile("/repo/pyproject.toml", gomock.Any(), fs.FileMode(0o644)).Return(errors.New("disk full"))
+
+	plugin := plugins.NewPreparePlugin(mockFS, noopLogger{}, domain.PrepareConfig{
+		VersionFiles: []string{"pyproject.toml:tool.poetry.version"},
+	})
+
+	rc := &domain.ReleaseContext{
+		RepositoryRoot: "/repo",
+		CurrentProject: &domain.ProjectReleasePlan{
+			NextVersion: domain.NewVersion(2, 0, 0),
+		},
+	}
+
+	err := plugin.Prepare(context.Background(), rc)
+	if err == nil {
+		t.Fatal("expected error when TOML WriteFile fails, got nil")
+	}
+	if !strings.Contains(err.Error(), "writing") {
+		t.Errorf("expected write error message, got: %v", err)
+	}
+}
+
+func TestPreparePlugin_PlainVersionFilesWriteError(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	mockFS := mocks.NewMockFileSystem(ctrl)
+
+	mockFS.EXPECT().WriteFile("/repo/VERSION", []byte("1.0.0\n"), fs.FileMode(0o644)).Return(errors.New("read-only filesystem"))
+
+	plugin := plugins.NewPreparePlugin(mockFS, noopLogger{}, domain.PrepareConfig{
+		VersionFiles: []string{"VERSION"},
+	})
+
+	rc := &domain.ReleaseContext{
+		RepositoryRoot: "/repo",
+		CurrentProject: &domain.ProjectReleasePlan{
+			NextVersion: domain.NewVersion(1, 0, 0),
+		},
+	}
+
+	err := plugin.Prepare(context.Background(), rc)
+	if err == nil {
+		t.Fatal("expected error when plain version_files WriteFile fails, got nil")
+	}
+	if !strings.Contains(err.Error(), "writing version file") {
+		t.Errorf("expected 'writing version file' in error, got: %v", err)
+	}
+}

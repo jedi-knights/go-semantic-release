@@ -13,6 +13,7 @@ import (
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/storer"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 
@@ -43,9 +44,6 @@ func (r *Repository) CurrentBranch(_ context.Context) (string, error) {
 	head, err := r.repo.Head()
 	if err != nil {
 		return "", fmt.Errorf("getting HEAD: %w", err)
-	}
-	if !head.Name().IsBranch() {
-		return head.Name().Short(), nil
 	}
 	return head.Name().Short(), nil
 }
@@ -108,7 +106,7 @@ func (r *Repository) CommitsSince(_ context.Context, sinceHash string) ([]domain
 	var commits []domain.Commit
 	err = iter.ForEach(func(c *object.Commit) error {
 		if sinceHash != "" && c.Hash.String() == sinceHash {
-			return fmt.Errorf("stop") // sentinel to break iteration
+			return storer.ErrStop
 		}
 
 		subject, body := splitMessage(c.Message)
@@ -123,8 +121,7 @@ func (r *Repository) CommitsSince(_ context.Context, sinceHash string) ([]domain
 		})
 		return nil
 	})
-	// Ignore sentinel error.
-	if err != nil && err.Error() != "stop" {
+	if err != nil {
 		return nil, err
 	}
 
@@ -179,7 +176,15 @@ func (r *Repository) CreateTag(_ context.Context, name, hash, message string) er
 		return err
 	}
 
-	// Create lightweight tag.
+	// Create lightweight tag — check for an existing ref first because
+	// Storer.SetReference silently overwrites rather than erroring on duplicates.
+	existing, _ := r.repo.Storer.Reference(plumbing.NewTagReferenceName(name))
+	if existing != nil {
+		if existing.Hash().String() == hash {
+			return domain.ErrTagAlreadyExists
+		}
+		return git.ErrTagExists
+	}
 	ref := plumbing.NewReferenceFromStrings("refs/tags/"+name, hash)
 	return r.repo.Storer.SetReference(ref)
 }
