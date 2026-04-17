@@ -532,3 +532,178 @@ func TestPreparePlugin_RelativeRepositoryRoot(t *testing.T) {
 		t.Errorf("expected absolute-path error, got: %v", err)
 	}
 }
+
+func TestPreparePlugin_RunsCommandDuringPrepare(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	mockFS := mocks.NewMockFileSystem(ctrl)
+
+	var capturedCmd string
+	plugin := plugins.NewPreparePlugin(mockFS, noopLogger{}, domain.PrepareConfig{
+		Command: "uv lock",
+	}, plugins.WithCommandRunner(func(_ context.Context, cmd string, _ domain.Version) error {
+		capturedCmd = cmd
+		return nil
+	}))
+
+	rc := &domain.ReleaseContext{
+		RepositoryRoot: "/repo",
+		CurrentProject: &domain.ProjectReleasePlan{
+			NextVersion: domain.NewVersion(1, 0, 0),
+		},
+	}
+
+	if err := plugin.Prepare(context.Background(), rc); err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	if capturedCmd != "uv lock" {
+		t.Errorf("capturedCmd = %q, want %q", capturedCmd, "uv lock")
+	}
+}
+
+func TestPreparePlugin_CommandErrorPropagates(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	mockFS := mocks.NewMockFileSystem(ctrl)
+
+	plugin := plugins.NewPreparePlugin(mockFS, noopLogger{}, domain.PrepareConfig{
+		Command: "fail",
+	}, plugins.WithCommandRunner(func(_ context.Context, _ string, _ domain.Version) error {
+		return errors.New("command failed with exit status 1")
+	}))
+
+	rc := &domain.ReleaseContext{
+		RepositoryRoot: "/repo",
+		CurrentProject: &domain.ProjectReleasePlan{
+			NextVersion: domain.NewVersion(1, 0, 0),
+		},
+	}
+
+	err := plugin.Prepare(context.Background(), rc)
+	if err == nil {
+		t.Fatal("expected error when command fails, got nil")
+	}
+	if !strings.Contains(err.Error(), "prepare command failed") {
+		t.Errorf("expected 'prepare command failed' in error, got: %v", err)
+	}
+}
+
+func TestPreparePlugin_SkipsCommandWhenEmpty(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	mockFS := mocks.NewMockFileSystem(ctrl)
+
+	called := false
+	plugin := plugins.NewPreparePlugin(mockFS, noopLogger{}, domain.PrepareConfig{
+		Command: "", // no command configured
+	}, plugins.WithCommandRunner(func(_ context.Context, _ string, _ domain.Version) error {
+		called = true
+		return nil
+	}))
+
+	rc := &domain.ReleaseContext{
+		RepositoryRoot: "/repo",
+		CurrentProject: &domain.ProjectReleasePlan{
+			NextVersion: domain.NewVersion(1, 0, 0),
+		},
+	}
+
+	if err := plugin.Prepare(context.Background(), rc); err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	if called {
+		t.Error("command runner should not be called when Command is empty")
+	}
+}
+
+func TestPreparePlugin_UpdatesTOMLVersionFile(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	mockFS := mocks.NewMockFileSystem(ctrl)
+
+	pyproject := []byte("[tool.poetry]\nname = \"myproject\"\nversion = \"1.0.0\"\n")
+
+	mockFS.EXPECT().ReadFile("/repo/pyproject.toml").Return(pyproject, nil)
+	mockFS.EXPECT().WriteFile(
+		"/repo/pyproject.toml",
+		gomock.Any(),
+		fs.FileMode(0o644),
+	).DoAndReturn(func(_ string, data []byte, _ fs.FileMode) error {
+		if !strings.Contains(string(data), `version = "2.0.0"`) {
+			t.Errorf("expected version = \"2.0.0\" in updated file, got:\n%s", data)
+		}
+		if strings.Contains(string(data), `version = "1.0.0"`) {
+			t.Error("old version should be replaced")
+		}
+		return nil
+	})
+
+	plugin := plugins.NewPreparePlugin(mockFS, noopLogger{}, domain.PrepareConfig{
+		VersionFiles: []string{"pyproject.toml:tool.poetry.version"},
+	})
+
+	rc := &domain.ReleaseContext{
+		RepositoryRoot: "/repo",
+		CurrentProject: &domain.ProjectReleasePlan{
+			NextVersion: domain.NewVersion(2, 0, 0),
+		},
+	}
+
+	if err := plugin.Prepare(context.Background(), rc); err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+}
+
+func TestPreparePlugin_VersionFilesReadError(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	mockFS := mocks.NewMockFileSystem(ctrl)
+
+	mockFS.EXPECT().ReadFile("/repo/pyproject.toml").Return(nil, errors.New("file not found"))
+
+	plugin := plugins.NewPreparePlugin(mockFS, noopLogger{}, domain.PrepareConfig{
+		VersionFiles: []string{"pyproject.toml:tool.poetry.version"},
+	})
+
+	rc := &domain.ReleaseContext{
+		RepositoryRoot: "/repo",
+		CurrentProject: &domain.ProjectReleasePlan{
+			NextVersion: domain.NewVersion(1, 0, 0),
+		},
+	}
+
+	err := plugin.Prepare(context.Background(), rc)
+	if err == nil {
+		t.Fatal("expected error when file cannot be read")
+	}
+}
+
+func TestPreparePlugin_MultipleVersionFiles(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	mockFS := mocks.NewMockFileSystem(ctrl)
+
+	pyproject := []byte("[tool.poetry]\nversion = \"1.0.0\"\n")
+
+	mockFS.EXPECT().ReadFile("/repo/pyproject.toml").Return(pyproject, nil)
+	mockFS.EXPECT().WriteFile("/repo/pyproject.toml", gomock.Any(), fs.FileMode(0o644)).Return(nil)
+	mockFS.EXPECT().WriteFile("/repo/VERSION", []byte("2.0.0\n"), fs.FileMode(0o644)).Return(nil)
+
+	plugin := plugins.NewPreparePlugin(mockFS, noopLogger{}, domain.PrepareConfig{
+		VersionFiles: []string{
+			"pyproject.toml:tool.poetry.version",
+			"VERSION",
+		},
+	})
+
+	rc := &domain.ReleaseContext{
+		RepositoryRoot: "/repo",
+		CurrentProject: &domain.ProjectReleasePlan{
+			NextVersion: domain.NewVersion(2, 0, 0),
+		},
+	}
+
+	if err := plugin.Prepare(context.Background(), rc); err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+}

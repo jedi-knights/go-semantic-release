@@ -178,3 +178,22 @@ func (r *Repository) HeadHash(ctx context.Context) (string, error) {
 func (r *Repository) RemoteURL(ctx context.Context) (string, error) {
 	return r.run(ctx, "remote", "get-url", "origin")
 }
+
+func (r *Repository) Stage(ctx context.Context, files []string) error {
+	if len(files) == 0 {
+		return nil
+	}
+	args := append([]string{"add", "--"}, files...)
+	_, err := r.run(ctx, args...)
+	return err
+}
+
+func (r *Repository) Commit(ctx context.Context, message string) error {
+	_, err := r.run(ctx, "commit", "-m", message)
+	return err
+}
+
+func (r *Repository) Push(ctx context.Context) error {
+	_, err := r.run(ctx, "push", "origin", "HEAD")
+	return err
+}

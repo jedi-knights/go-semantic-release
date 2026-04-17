@@ -1,8 +1,10 @@
 package plugins
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"html/template"
 
 	"github.com/jedi-knights/go-semantic-release/internal/domain"
 	"github.com/jedi-knights/go-semantic-release/internal/ports"
@@ -15,14 +17,14 @@ var (
 	_ ports.PublishPlugin          = (*GitPlugin)(nil)
 )
 
-// GitPlugin handles git operations: verifyConditions (git access), prepare (commit changes), publish (tag + push).
+// GitPlugin handles git operations: verifyConditions (git access), publish (stage → commit → push → tag).
 type GitPlugin struct {
 	git        ports.GitRepository
 	tagService ports.TagService
 	fs         ports.FileSystem
 	logger     ports.Logger
 	identity   domain.GitIdentity
-	assets     []string // files to commit in prepare step
+	gitConfig  domain.GitConfig
 }
 
 // NewGitPlugin creates the built-in git plugin.
@@ -32,7 +34,7 @@ func NewGitPlugin(
 	fs ports.FileSystem,
 	logger ports.Logger,
 	identity domain.GitIdentity,
-	assets []string,
+	gitConfig domain.GitConfig,
 ) *GitPlugin {
 	return &GitPlugin{
 		git:        git,
@@ -40,7 +42,7 @@ func NewGitPlugin(
 		fs:         fs,
 		logger:     logger,
 		identity:   identity,
-		assets:     assets,
+		gitConfig:  gitConfig,
 	}
 }
 
@@ -65,17 +67,31 @@ func (p *GitPlugin) Publish(ctx context.Context, rc *domain.ReleaseContext) (*do
 	}
 	rc.TagName = tagName
 
+	// Stage and commit release assets before tagging so the tag points to the release commit.
+	if len(p.gitConfig.Assets) > 0 {
+		if err = p.git.Stage(ctx, p.gitConfig.Assets); err != nil {
+			return nil, fmt.Errorf("staging release assets: %w", err)
+		}
+		commitMsg := renderCommitMessage(p.gitConfig.Message, tagName, rc.CurrentProject.NextVersion)
+		if err = p.git.Commit(ctx, commitMsg); err != nil {
+			return nil, fmt.Errorf("committing release assets: %w", err)
+		}
+		if err = p.git.Push(ctx); err != nil {
+			return nil, fmt.Errorf("pushing release branch: %w", err)
+		}
+	}
+
 	headHash, err := p.git.HeadHash(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("getting HEAD hash: %w", err)
 	}
 
-	message := fmt.Sprintf("chore(release): %s", tagName)
+	tagMessage := fmt.Sprintf("chore(release): %s", tagName)
 	if rc.Notes != "" {
-		message = rc.Notes
+		tagMessage = rc.Notes
 	}
 
-	if err := p.git.CreateTag(ctx, tagName, headHash, message); err != nil {
+	if err := p.git.CreateTag(ctx, tagName, headHash, tagMessage); err != nil {
 		return nil, fmt.Errorf("creating tag %s: %w", tagName, err)
 	}
 
@@ -92,4 +108,29 @@ func (p *GitPlugin) Publish(ctx context.Context, rc *domain.ReleaseContext) (*do
 		TagCreated: true,
 		Changelog:  rc.Notes,
 	}, nil
+}
+
+// renderCommitMessage renders the commit message template with version data.
+// Supports {{.Version}} and {{.Tag}} placeholders.
+// Falls back to "chore(release): {tagName}" on empty template or render error.
+func renderCommitMessage(tmpl, tagName string, version domain.Version) string {
+	if tmpl == "" {
+		return fmt.Sprintf("chore(release): %s", tagName)
+	}
+	data := struct {
+		Version string
+		Tag     string
+	}{
+		Version: version.String(),
+		Tag:     tagName,
+	}
+	t, err := template.New("").Parse(tmpl)
+	if err != nil {
+		return fmt.Sprintf("chore(release): %s", tagName)
+	}
+	var buf bytes.Buffer
+	if err := t.Execute(&buf, data); err != nil {
+		return fmt.Sprintf("chore(release): %s", tagName)
+	}
+	return buf.String()
 }

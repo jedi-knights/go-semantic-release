@@ -1,6 +1,9 @@
 package domain
 
-import "slices"
+import (
+	"slices"
+	"strings"
+)
 
 // Config holds all configuration for the release process.
 type Config struct {
@@ -31,6 +34,9 @@ type Config struct {
 
 	// Prepare step settings.
 	Prepare PrepareConfig `mapstructure:"prepare"`
+
+	// Git settings for pre-tag commits (staging assets, commit message).
+	Git GitConfig `mapstructure:"git"`
 
 	// Git identity for automated commits.
 	GitAuthor    GitIdentity `mapstructure:"git_author"`
@@ -87,6 +93,30 @@ type PrepareConfig struct {
 	ChangelogFile   string   `mapstructure:"changelog_file"`
 	VersionFile     string   `mapstructure:"version_file"`
 	AdditionalFiles []string `mapstructure:"additional_files"`
+	Command         string   `mapstructure:"command"`
+	VersionFiles    []string `mapstructure:"version_files"`
+}
+
+// GitConfig holds settings for git operations performed during the release workflow.
+type GitConfig struct {
+	Assets  []string `mapstructure:"assets"`
+	Message string   `mapstructure:"message"`
+}
+
+// VersionFileEntry holds a parsed version_files entry.
+type VersionFileEntry struct {
+	Path    string // file path relative to repository root
+	KeyPath string // dot-separated TOML key path; empty for plain-text files
+}
+
+// ParseVersionFileEntry parses a version_files entry of the form "path" or "path:key.path".
+// A trailing colon (e.g. "some.toml:") is treated as an empty key path.
+func ParseVersionFileEntry(entry string) VersionFileEntry {
+	i := strings.Index(entry, ":")
+	if i < 0 {
+		return VersionFileEntry{Path: entry}
+	}
+	return VersionFileEntry{Path: entry[:i], KeyPath: entry[i+1:]}
 }
 
 // ProjectConfig defines a project in the configuration file.

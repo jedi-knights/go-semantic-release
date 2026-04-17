@@ -77,6 +77,37 @@ func TestConfig_IsInteractive(t *testing.T) {
 	}
 }
 
+func TestParseVersionFileEntry_PlainPath(t *testing.T) {
+	e := domain.ParseVersionFileEntry("VERSION")
+	if e.Path != "VERSION" {
+		t.Errorf("Path = %q, want %q", e.Path, "VERSION")
+	}
+	if e.KeyPath != "" {
+		t.Errorf("KeyPath = %q, want empty", e.KeyPath)
+	}
+}
+
+func TestParseVersionFileEntry_TOMLKeyPath(t *testing.T) {
+	e := domain.ParseVersionFileEntry("pyproject.toml:tool.poetry.version")
+	if e.Path != "pyproject.toml" {
+		t.Errorf("Path = %q, want %q", e.Path, "pyproject.toml")
+	}
+	if e.KeyPath != "tool.poetry.version" {
+		t.Errorf("KeyPath = %q, want %q", e.KeyPath, "tool.poetry.version")
+	}
+}
+
+func TestParseVersionFileEntry_EmptyKeyPath(t *testing.T) {
+	// A trailing colon means the file has an explicitly empty key path.
+	e := domain.ParseVersionFileEntry("some.toml:")
+	if e.Path != "some.toml" {
+		t.Errorf("Path = %q, want %q", e.Path, "some.toml")
+	}
+	if e.KeyPath != "" {
+		t.Errorf("KeyPath = %q, want empty", e.KeyPath)
+	}
+}
+
 func TestDefaultConfig_SensibleDefaults(t *testing.T) {
 	cfg := domain.DefaultConfig()
 

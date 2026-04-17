@@ -226,6 +226,55 @@ func (r *Repository) RemoteURL(_ context.Context) (string, error) {
 	return urls[0], nil
 }
 
+// Stage adds the given file paths to the worktree index.
+func (r *Repository) Stage(_ context.Context, files []string) error {
+	if len(files) == 0 {
+		return nil
+	}
+	w, err := r.repo.Worktree()
+	if err != nil {
+		return fmt.Errorf("getting worktree: %w", err)
+	}
+	for _, file := range files {
+		if _, err := w.Add(file); err != nil {
+			return fmt.Errorf("staging %s: %w", file, err)
+		}
+	}
+	return nil
+}
+
+// Commit creates a commit with the given message from the current index.
+func (r *Repository) Commit(_ context.Context, message string) error {
+	w, err := r.repo.Worktree()
+	if err != nil {
+		return fmt.Errorf("getting worktree: %w", err)
+	}
+	_, err = w.Commit(message, &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "semantic-release-bot",
+			Email: "semantic-release-bot@users.noreply.github.com",
+			When:  time.Now(),
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("committing: %w", err)
+	}
+	return nil
+}
+
+// Push pushes the current branch to origin.
+func (r *Repository) Push(_ context.Context) error {
+	auth := resolveAuth()
+	err := r.repo.Push(&git.PushOptions{
+		RemoteName: "origin",
+		Auth:       auth,
+	})
+	if err == nil || errors.Is(err, git.NoErrAlreadyUpToDate) {
+		return nil
+	}
+	return fmt.Errorf("pushing branch: %w", err)
+}
+
 func splitMessage(msg string) (subject, body string) {
 	parts := strings.SplitN(strings.TrimSpace(msg), "\n", 2)
 	subject = strings.TrimSpace(parts[0])

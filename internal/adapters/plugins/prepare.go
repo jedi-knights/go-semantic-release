@@ -1,9 +1,12 @@
 package plugins
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io/fs"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -17,22 +20,46 @@ var (
 	_ ports.PreparePlugin = (*PreparePlugin)(nil)
 )
 
-// PreparePlugin updates files (CHANGELOG.md, VERSION) before the release is published.
+// commandRunnerFunc is the function type used to execute prepare commands.
+type commandRunnerFunc func(ctx context.Context, cmd string, version domain.Version) error
+
+// PrepareOption configures a PreparePlugin after construction.
+type PrepareOption func(*PreparePlugin)
+
+// WithCommandRunner injects a custom command runner. Intended for testing.
+func WithCommandRunner(fn commandRunnerFunc) PrepareOption {
+	return func(p *PreparePlugin) {
+		p.runCmd = fn
+	}
+}
+
+// PreparePlugin updates files (CHANGELOG.md, VERSION, version_files) before the release is published,
+// then optionally runs a prepare command.
 type PreparePlugin struct {
 	fs            ports.FileSystem
 	logger        ports.Logger
-	changelogFile string // global changelog path relative to repo root, empty to skip
-	versionFile   string // path to VERSION file, empty to skip
+	changelogFile string   // global changelog path relative to repo root, empty to skip
+	versionFile   string   // path to VERSION file, empty to skip
+	command       string   // shell command to run after file updates, empty to skip
+	versionFiles  []string // additional version files (format: "path" or "path:key.path")
+	runCmd        commandRunnerFunc
 }
 
 // NewPreparePlugin creates a plugin that updates release files.
-func NewPreparePlugin(fsys ports.FileSystem, logger ports.Logger, cfg domain.PrepareConfig) *PreparePlugin {
-	return &PreparePlugin{
+func NewPreparePlugin(fsys ports.FileSystem, logger ports.Logger, cfg domain.PrepareConfig, opts ...PrepareOption) *PreparePlugin {
+	p := &PreparePlugin{
 		fs:            fsys,
 		logger:        logger,
 		changelogFile: cfg.ChangelogFile,
 		versionFile:   cfg.VersionFile,
+		command:       cfg.Command,
+		versionFiles:  cfg.VersionFiles,
+		runCmd:        defaultCommandRunner,
 	}
+	for _, opt := range opts {
+		opt(p)
+	}
+	return p
 }
 
 func (p *PreparePlugin) Name() string { return "prepare-files" }
@@ -45,6 +72,14 @@ func (p *PreparePlugin) Prepare(ctx context.Context, rc *domain.ReleaseContext) 
 	version := rc.CurrentProject.NextVersion
 
 	if err := p.updateVersionFile(ctx, version, rc.RepositoryRoot); err != nil {
+		return err
+	}
+
+	if err := p.updateVersionFiles(ctx, version, rc.RepositoryRoot); err != nil {
+		return err
+	}
+
+	if err := p.runCommand(ctx, version); err != nil {
 		return err
 	}
 
@@ -65,6 +100,62 @@ func (p *PreparePlugin) updateVersionFile(_ context.Context, version domain.Vers
 		return fmt.Errorf("writing version file %s: %w", path, err)
 	}
 	p.logger.Info("updated version file", "path", path, "version", version)
+	return nil
+}
+
+// updateVersionFiles processes each entry in version_files.
+// Entries of the form "path:key.path" update a TOML key; plain "path" entries write the version as plain text.
+func (p *PreparePlugin) updateVersionFiles(_ context.Context, version domain.Version, repoRoot string) error {
+	for _, entry := range p.versionFiles {
+		ve := domain.ParseVersionFileEntry(entry)
+		path := filepath.Join(repoRoot, ve.Path)
+
+		if ve.KeyPath == "" {
+			if err := p.fs.WriteFile(path, []byte(version.String()+"\n"), fs.FileMode(0o644)); err != nil {
+				return fmt.Errorf("writing version file %s: %w", path, err)
+			}
+			p.logger.Info("updated version file", "path", path, "version", version)
+			continue
+		}
+
+		content, err := p.fs.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("reading %s: %w", path, err)
+		}
+		updated, err := updateTOMLKey(content, ve.KeyPath, version.String())
+		if err != nil {
+			return fmt.Errorf("updating TOML key in %s: %w", path, err)
+		}
+		if err := p.fs.WriteFile(path, updated, fs.FileMode(0o644)); err != nil {
+			return fmt.Errorf("writing %s: %w", path, err)
+		}
+		p.logger.Info("updated TOML version key", "path", path, "key", ve.KeyPath, "version", version)
+	}
+	return nil
+}
+
+// runCommand executes the configured prepare command, exposing NEXT_RELEASE_VERSION as an env var.
+func (p *PreparePlugin) runCommand(ctx context.Context, version domain.Version) error {
+	if p.command == "" {
+		return nil
+	}
+	p.logger.Info("running prepare command", "command", p.command)
+	if err := p.runCmd(ctx, p.command, version); err != nil {
+		return fmt.Errorf("prepare command failed: %w", err)
+	}
+	return nil
+}
+
+// defaultCommandRunner executes a shell command via sh -c.
+func defaultCommandRunner(ctx context.Context, cmd string, version domain.Version) error {
+	c := exec.CommandContext(ctx, "sh", "-c", cmd)
+	c.Env = append(os.Environ(), "NEXT_RELEASE_VERSION="+version.String())
+	var out bytes.Buffer
+	c.Stdout = &out
+	c.Stderr = &out
+	if err := c.Run(); err != nil {
+		return fmt.Errorf("%w: %s", err, strings.TrimSpace(out.String()))
+	}
 	return nil
 }
 
