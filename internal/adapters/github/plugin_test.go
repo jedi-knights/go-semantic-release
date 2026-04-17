@@ -31,6 +31,7 @@ func baseConfig(apiURL string) github.PluginConfig {
 }
 
 func TestPlugin_Name(t *testing.T) {
+	t.Parallel()
 	p := github.NewPlugin(baseConfig("http://unused"), noopLogger{})
 	if got := p.Name(); got != "github" {
 		t.Errorf("Name() = %q, want %q", got, "github")
@@ -38,6 +39,7 @@ func TestPlugin_Name(t *testing.T) {
 }
 
 func TestPlugin_NewPlugin_Defaults(t *testing.T) {
+	t.Parallel()
 	// When no optional fields are provided the constructor should supply sensible defaults.
 	cfg := github.PluginConfig{
 		Owner: "o",
@@ -81,6 +83,7 @@ func TestPlugin_NewPlugin_Defaults(t *testing.T) {
 }
 
 func TestPlugin_NewPlugin_TokenFromEnv(t *testing.T) {
+	// t.Setenv is incompatible with t.Parallel — cannot mark this test parallel.
 	t.Setenv("GH_TOKEN", "env-token")
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -107,6 +110,7 @@ func TestPlugin_NewPlugin_TokenFromEnv(t *testing.T) {
 }
 
 func TestPlugin_VerifyConditions_NoToken(t *testing.T) {
+	// t.Setenv is incompatible with t.Parallel — cannot mark this test parallel.
 	// Ensure no env vars bleed in from the test environment.
 	t.Setenv("GH_TOKEN", "")
 	t.Setenv("GITHUB_TOKEN", "")
@@ -121,6 +125,7 @@ func TestPlugin_VerifyConditions_NoToken(t *testing.T) {
 }
 
 func TestPlugin_VerifyConditions_NoOwnerRepo(t *testing.T) {
+	t.Parallel()
 	cfg := github.PluginConfig{Token: "tok", APIURL: "http://unused"}
 	p := github.NewPlugin(cfg, noopLogger{})
 	err := p.VerifyConditions(context.Background(), &domain.ReleaseContext{})
@@ -130,6 +135,7 @@ func TestPlugin_VerifyConditions_NoOwnerRepo(t *testing.T) {
 }
 
 func TestPlugin_VerifyConditions_Unauthorized(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 	}))
@@ -143,6 +149,7 @@ func TestPlugin_VerifyConditions_Unauthorized(t *testing.T) {
 }
 
 func TestPlugin_VerifyConditions_Forbidden(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 	}))
@@ -156,6 +163,7 @@ func TestPlugin_VerifyConditions_Forbidden(t *testing.T) {
 }
 
 func TestPlugin_VerifyConditions_UnexpectedStatus(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
@@ -169,6 +177,7 @@ func TestPlugin_VerifyConditions_UnexpectedStatus(t *testing.T) {
 }
 
 func TestPlugin_VerifyConditions_OK(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -182,6 +191,7 @@ func TestPlugin_VerifyConditions_OK(t *testing.T) {
 }
 
 func TestPlugin_Publish_NilProject(t *testing.T) {
+	t.Parallel()
 	p := github.NewPlugin(baseConfig("http://unused"), noopLogger{})
 	rc := &domain.ReleaseContext{CurrentProject: nil}
 	result, err := p.Publish(context.Background(), rc)
@@ -194,6 +204,7 @@ func TestPlugin_Publish_NilProject(t *testing.T) {
 }
 
 func TestPlugin_Publish_Success(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/releases") {
 			w.Header().Set("Content-Type", "application/json")
@@ -235,6 +246,7 @@ func TestPlugin_Publish_Success(t *testing.T) {
 }
 
 func TestPlugin_Publish_Failure(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
@@ -255,6 +267,7 @@ func TestPlugin_Publish_Failure(t *testing.T) {
 }
 
 func TestPlugin_AddChannel_EmptyTag(t *testing.T) {
+	t.Parallel()
 	// When TagName is empty no HTTP request should be made.
 	p := github.NewPlugin(baseConfig("http://should-not-be-called"), noopLogger{})
 	rc := &domain.ReleaseContext{TagName: ""}
@@ -264,6 +277,7 @@ func TestPlugin_AddChannel_EmptyTag(t *testing.T) {
 }
 
 func TestPlugin_AddChannel_ReleaseNotFound(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// GET /repos/owner/repo/releases/tags/v1.0.0 → 404 means no release exists
 		if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/releases/tags/") {
@@ -282,6 +296,7 @@ func TestPlugin_AddChannel_ReleaseNotFound(t *testing.T) {
 }
 
 func TestPlugin_AddChannel_UpdateSuccess(t *testing.T) {
+	t.Parallel()
 	release := map[string]any{
 		"id":       42,
 		"html_url": "https://github.com/org/repo/releases/42",
@@ -310,6 +325,7 @@ func TestPlugin_AddChannel_UpdateSuccess(t *testing.T) {
 }
 
 func TestPlugin_AddChannel_UpdateFailure(t *testing.T) {
+	t.Parallel()
 	release := map[string]any{
 		"id":       42,
 		"html_url": "https://github.com/org/repo/releases/42",
@@ -338,6 +354,7 @@ func TestPlugin_AddChannel_UpdateFailure(t *testing.T) {
 }
 
 func TestPlugin_Success_NilProject(t *testing.T) {
+	t.Parallel()
 	p := github.NewPlugin(baseConfig("http://unused"), noopLogger{})
 	rc := &domain.ReleaseContext{CurrentProject: nil}
 	if err := p.Success(context.Background(), rc); err != nil {
@@ -346,6 +363,7 @@ func TestPlugin_Success_NilProject(t *testing.T) {
 }
 
 func TestPlugin_Success_WithCommits(t *testing.T) {
+	t.Parallel()
 	prs := []map[string]any{{"number": 7}}
 	// Track which requests arrived so we can assert they happened.
 	var gotGetCommitPRs, gotPostComment, gotPostLabels bool
@@ -402,6 +420,7 @@ func TestPlugin_Success_WithCommits(t *testing.T) {
 }
 
 func TestPlugin_Fail_NilError(t *testing.T) {
+	t.Parallel()
 	p := github.NewPlugin(baseConfig("http://unused"), noopLogger{})
 	rc := &domain.ReleaseContext{Error: nil}
 	if err := p.Fail(context.Background(), rc); err != nil {
@@ -410,6 +429,7 @@ func TestPlugin_Fail_NilError(t *testing.T) {
 }
 
 func TestPlugin_Fail_FindsExistingIssue(t *testing.T) {
+	t.Parallel()
 	existingIssues := []map[string]any{
 		{"number": 5, "title": "The automated release is failing", "state": "open"},
 	}
@@ -445,6 +465,7 @@ func TestPlugin_Fail_FindsExistingIssue(t *testing.T) {
 }
 
 func TestPlugin_Fail_CreatesNewIssue(t *testing.T) {
+	t.Parallel()
 	var gotCreateIssue bool
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -473,5 +494,87 @@ func TestPlugin_Fail_CreatesNewIssue(t *testing.T) {
 	}
 	if !gotCreateIssue {
 		t.Error("expected POST create issue request, did not see one")
+	}
+}
+
+func TestPlugin_Fail_SearchErrorFallsThroughToCreate(t *testing.T) {
+	// When findFailureIssue errors (server returns 500), the error is logged at Debug
+	// and the plugin falls through to create a new issue anyway.
+	t.Parallel()
+	var gotCreateIssue bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/issues"):
+			w.WriteHeader(http.StatusInternalServerError)
+		case r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/issues"):
+			gotCreateIssue = true
+			w.WriteHeader(http.StatusCreated)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	p := github.NewPlugin(baseConfig(srv.URL), noopLogger{})
+	rc := &domain.ReleaseContext{
+		Branch: "main",
+		Error:  errors.New("release pipeline failed"),
+	}
+	if err := p.Fail(context.Background(), rc); err != nil {
+		t.Errorf("Fail() should return nil even when issue search fails, got: %v", err)
+	}
+	if !gotCreateIssue {
+		t.Error("expected createIssue to be called after findFailureIssue error")
+	}
+}
+
+func TestPlugin_Fail_CreateIssueFails(t *testing.T) {
+	// When createIssue gets a non-201 response, Fail returns an error.
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/issues"):
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("[]"))
+		case r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/issues"):
+			w.WriteHeader(http.StatusUnprocessableEntity)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	p := github.NewPlugin(baseConfig(srv.URL), noopLogger{})
+	rc := &domain.ReleaseContext{
+		Branch: "main",
+		Error:  errors.New("release pipeline failed"),
+	}
+	if err := p.Fail(context.Background(), rc); err == nil {
+		t.Fatal("expected error when createIssue fails, got nil")
+	}
+}
+
+func TestPlugin_AddChannel_GetReleaseError(t *testing.T) {
+	// A non-404, non-200 status from the tag-release endpoint makes getReleaseByTag
+	// return an error, which AddChannel wraps and returns.
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/releases/tags/") {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	p := github.NewPlugin(baseConfig(srv.URL), noopLogger{})
+	rc := &domain.ReleaseContext{TagName: "v1.0.0"}
+	err := p.AddChannel(context.Background(), rc)
+	if err == nil {
+		t.Fatal("expected error for 500 on release tag lookup, got nil")
+	}
+	if !strings.Contains(err.Error(), "finding release for tag") {
+		t.Errorf("expected 'finding release for tag' in error, got: %v", err)
 	}
 }

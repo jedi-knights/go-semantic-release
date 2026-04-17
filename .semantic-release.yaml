@@ -40,7 +40,14 @@ branches:
 
 prepare:
   changelog_file: CHANGELOG.md
-  version_file: VERSION
+  version_files:
+    - VERSION
+
+git:
+  assets:
+    - CHANGELOG.md
+    - VERSION
+  message: "chore(release): {{.Version}} [skip ci]\n\n{{.Notes}}"
 
 github:
   # GoReleaser creates the GitHub release and attaches pre-built binaries.

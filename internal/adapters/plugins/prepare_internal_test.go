@@ -1,6 +1,10 @@
 package plugins
 
 import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -126,5 +130,44 @@ func TestPrependChangelog(t *testing.T) {
 				t.Errorf("prependChangelog() result missing %q:\n%s", tt.wantSubstring, got)
 			}
 		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// defaultCommandRunner
+// ---------------------------------------------------------------------------
+
+func TestDefaultCommandRunner_Success(t *testing.T) {
+	t.Parallel()
+	err := defaultCommandRunner(context.Background(), "exit 0", domain.NewVersion(1, 0, 0))
+	if err != nil {
+		t.Errorf("expected nil for successful command, got %v", err)
+	}
+}
+
+func TestDefaultCommandRunner_Failure(t *testing.T) {
+	t.Parallel()
+	err := defaultCommandRunner(context.Background(), "exit 1", domain.NewVersion(1, 0, 0))
+	if err == nil {
+		t.Fatal("expected error for failing command, got nil")
+	}
+	if !strings.Contains(err.Error(), "exit status 1") {
+		t.Errorf("error should contain exit status, got: %v", err)
+	}
+}
+
+func TestDefaultCommandRunner_SetsVersionEnv(t *testing.T) {
+	t.Parallel()
+	tmpFile := filepath.Join(t.TempDir(), "ver.txt")
+	cmd := fmt.Sprintf(`echo $NEXT_RELEASE_VERSION > %q`, tmpFile)
+	if err := defaultCommandRunner(context.Background(), cmd, domain.NewVersion(2, 3, 4)); err != nil {
+		t.Fatalf("defaultCommandRunner: %v", err)
+	}
+	content, err := os.ReadFile(tmpFile)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if strings.TrimSpace(string(content)) != "2.3.4" {
+		t.Errorf("NEXT_RELEASE_VERSION = %q, want %q", strings.TrimSpace(string(content)), "2.3.4")
 	}
 }

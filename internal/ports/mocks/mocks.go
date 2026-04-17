@@ -162,6 +162,48 @@ func (mr *MockGitRepositoryMockRecorder) RemoteURL(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoteURL", reflect.TypeOf((*MockGitRepository)(nil).RemoteURL), ctx)
 }
 
+// Stage mocks base method.
+func (m *MockGitRepository) Stage(ctx context.Context, files []string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Stage", ctx, files)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Stage indicates an expected call of Stage.
+func (mr *MockGitRepositoryMockRecorder) Stage(ctx, files any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stage", reflect.TypeOf((*MockGitRepository)(nil).Stage), ctx, files)
+}
+
+// Commit mocks base method.
+func (m *MockGitRepository) Commit(ctx context.Context, message string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Commit", ctx, message)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Commit indicates an expected call of Commit.
+func (mr *MockGitRepositoryMockRecorder) Commit(ctx, message any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockGitRepository)(nil).Commit), ctx, message)
+}
+
+// Push mocks base method.
+func (m *MockGitRepository) Push(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Push", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Push indicates an expected call of Push.
+func (mr *MockGitRepositoryMockRecorder) Push(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Push", reflect.TypeOf((*MockGitRepository)(nil).Push), ctx)
+}
+
 // MockCommitParser is a mock of CommitParser interface.
 type MockCommitParser struct {
 	ctrl     *gomock.Controller

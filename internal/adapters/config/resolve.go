@@ -8,13 +8,19 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/viper"
 
 	"github.com/jedi-knights/go-semantic-release/internal/domain"
 )
 
 const maxExtendsDepth = 10
+
+// extendsHTTPClient is used for fetching remote extends configs. It has an
+// explicit timeout so that a slow or unresponsive URL does not block the CLI.
+var extendsHTTPClient = &http.Client{Timeout: 30 * time.Second}
 
 // ResolveExtends loads and merges all extended configurations into the base config.
 // Supports local file paths and HTTP(S) URLs. Detects cycles.
@@ -36,7 +42,14 @@ func resolveExtendsRecursive(cfg domain.Config, seen map[string]bool, depth int)
 		if seen[ref] {
 			return cfg, fmt.Errorf("circular extends detected: %q", ref)
 		}
-		seen[ref] = true
+
+		// Use a per-branch copy of the seen set so siblings that share a common
+		// ancestor (diamond-shaped extends) are not falsely flagged as cycles.
+		branchSeen := make(map[string]bool, len(seen)+1)
+		for k, v := range seen {
+			branchSeen[k] = v
+		}
+		branchSeen[ref] = true
 
 		parent, err := loadExtendsRef(ref)
 		if err != nil {
@@ -44,7 +57,7 @@ func resolveExtendsRecursive(cfg domain.Config, seen map[string]bool, depth int)
 		}
 
 		// Recursively resolve the parent's own extends.
-		parent, err = resolveExtendsRecursive(parent, seen, depth+1)
+		parent, err = resolveExtendsRecursive(parent, branchSeen, depth+1)
 		if err != nil {
 			return cfg, err
 		}
@@ -77,19 +90,29 @@ func loadExtendsFromFile(path string) (domain.Config, error) {
 	}
 
 	var cfg domain.Config
-	if err := v.Unmarshal(&cfg); err != nil {
+	if err := v.Unmarshal(&cfg, viper.DecodeHook(
+		mapstructure.ComposeDecodeHookFunc(
+			StringToGitHubAssetHookFunc(),
+			mapstructure.StringToTimeDurationHookFunc(),
+			mapstructure.StringToSliceHookFunc(","),
+		),
+	)); err != nil {
 		return domain.Config{}, fmt.Errorf("unmarshaling config: %w", err)
 	}
 
 	return cfg, nil
 }
 
+// loadExtendsFromURL fetches a remote extends config over HTTP.
+// It uses context.Background() because ResolveExtends does not yet accept a
+// context.Context. When ConfigProvider.Load gains a context parameter this
+// function should be updated to accept and forward it.
 func loadExtendsFromURL(rawURL string) (domain.Config, error) {
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, rawURL, http.NoBody)
 	if err != nil {
 		return domain.Config{}, fmt.Errorf("creating request: %w", err)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := extendsHTTPClient.Do(req)
 	if err != nil {
 		return domain.Config{}, fmt.Errorf("fetching URL: %w", err)
 	}
@@ -109,11 +132,12 @@ func loadExtendsFromURL(rawURL string) (domain.Config, error) {
 		return domain.Config{}, fmt.Errorf("creating temp file: %w", err)
 	}
 	defer func() { _ = os.Remove(tmpFile.Name()) }()
-	defer func() { _ = tmpFile.Close() }()
 
 	if _, err := tmpFile.Write(data); err != nil {
 		return domain.Config{}, fmt.Errorf("writing temp file: %w", err)
 	}
+	// Close explicitly before passing the path to loadExtendsFromFile, which
+	// opens the same file. No deferred close — the explicit close below is sufficient.
 	if err := tmpFile.Close(); err != nil {
 		return domain.Config{}, fmt.Errorf("closing temp file: %w", err)
 	}

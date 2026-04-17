@@ -258,9 +258,75 @@ Maintenance branches enforce version range constraints — a `1.0.x` branch only
 prepare:
   changelog_file: CHANGELOG.md
   version_file: VERSION
+  version_files:
+    - pyproject.toml:project.version
+    - package.json:version
+    - VERSION
+  command: "uv lock && uv run invoke generate-catalog"
 ```
 
-When configured, the prepare step updates `CHANGELOG.md` (prepending new entries) and `VERSION` (with the new version string) before the release is published.
+When configured, the prepare step runs before the release is published:
+
+1. **`changelog_file`** — prepends the generated release notes into the named Markdown file. If the file does not exist, it is created with a `# Changelog` header. Path is relative to the repository root.
+
+2. **`version_file`** — writes the new version string (plus a trailing newline) to the named file. Intended for a single `VERSION` file. Path is relative to the repository root.
+
+3. **`version_files`** — list of additional files to update. Each entry is either:
+   - A plain file path (e.g. `VERSION`) — the version string is written verbatim, replacing the file contents.
+   - A `path:key.path` pair (e.g. `pyproject.toml:project.version`) — the named TOML key inside `[section]` headers is updated in-place while preserving all formatting, spacing, and inline comments.
+
+   ```yaml
+   # Plain text — replaces the entire file with "1.2.3\n"
+   - VERSION
+
+   # TOML — updates version = "..." under [project]
+   - pyproject.toml:project.version
+
+   # TOML — updates version = "..." under [tool.poetry]
+   - pyproject.toml:tool.poetry.version
+   ```
+
+4. **`command`** — a shell command executed after file updates but before the release is tagged. The environment variable `NEXT_RELEASE_VERSION` is set to the new version string so scripts can reference it:
+
+   ```yaml
+   command: "uv lock && uv run invoke generate-catalog"
+   ```
+
+   ```bash
+   # In a script, reference the version directly:
+   echo "Releasing ${NEXT_RELEASE_VERSION}"
+   ```
+
+   If the command exits with a non-zero status, the release is aborted.
+
+### Git assets (pre-tag commit)
+
+```yaml
+git:
+  assets:
+    - CHANGELOG.md
+    - pyproject.toml
+    - VERSION
+    - sun_qa_python_tools/STEP_CATALOG.md
+    - uv.lock
+  message: "chore(release): {{.Version}} [skip ci]\n\n{{.Notes}}"
+```
+
+When `git.assets` is non-empty, the release workflow stages those files, commits them, and pushes the branch **before** creating the tag. This ensures the tag always points to the release commit rather than to a commit that predates the updated files.
+
+**`git.assets`** — list of file paths (relative to the repository root) to stage and commit. Typically includes files updated by the prepare step.
+
+**`git.message`** — Go template for the release commit message. Three placeholders are available:
+
+| Placeholder | Description |
+|------------|-------------|
+| `{{.Version}}` | The new semantic version string (e.g. `1.2.3`) |
+| `{{.Tag}}` | The full tag name (e.g. `my-svc/v1.2.3`) |
+| `{{.Notes}}` | The generated release notes (Markdown) |
+
+If `message` is empty or fails to render, the commit message defaults to `chore(release): <tag>`.
+
+> **`[skip ci]` convention:** Adding `[skip ci]` to the commit message prevents CI pipelines from re-triggering on the release commit, which is the standard pattern for automated release commits.
 
 ### Git identity
 
@@ -279,8 +345,14 @@ github:
   repo: go-semantic-release
   draft_release: false
   assets:
+    # Simple form — filename becomes the download label on the release page
     - "dist/*.tar.gz"
     - "dist/*.zip"
+    # Structured form — custom label shown on the release page
+    - path: "dist/*.tar.gz"
+      label: Source Tarballs
+    - path: "checksums.txt"
+      label: Checksums
   success_comment: "🎉 Released in {{.Version}}"
   released_labels:
     - released

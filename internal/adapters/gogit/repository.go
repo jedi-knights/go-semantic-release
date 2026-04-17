@@ -1,11 +1,12 @@
 package gogit
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/storer"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 
@@ -43,9 +45,6 @@ func (r *Repository) CurrentBranch(_ context.Context) (string, error) {
 	head, err := r.repo.Head()
 	if err != nil {
 		return "", fmt.Errorf("getting HEAD: %w", err)
-	}
-	if !head.Name().IsBranch() {
-		return head.Name().Short(), nil
 	}
 	return head.Name().Short(), nil
 }
@@ -81,8 +80,8 @@ func (r *Repository) ListTags(_ context.Context) ([]domain.Tag, error) {
 	}
 
 	// Sort by name descending (version sort).
-	sort.Slice(tags, func(i, j int) bool {
-		return tags[i].Name > tags[j].Name
+	slices.SortFunc(tags, func(a, b domain.Tag) int {
+		return cmp.Compare(b.Name, a.Name)
 	})
 
 	return tags, nil
@@ -108,7 +107,7 @@ func (r *Repository) CommitsSince(_ context.Context, sinceHash string) ([]domain
 	var commits []domain.Commit
 	err = iter.ForEach(func(c *object.Commit) error {
 		if sinceHash != "" && c.Hash.String() == sinceHash {
-			return fmt.Errorf("stop") // sentinel to break iteration
+			return storer.ErrStop
 		}
 
 		subject, body := splitMessage(c.Message)
@@ -123,8 +122,7 @@ func (r *Repository) CommitsSince(_ context.Context, sinceHash string) ([]domain
 		})
 		return nil
 	})
-	// Ignore sentinel error.
-	if err != nil && err.Error() != "stop" {
+	if err != nil {
 		return nil, err
 	}
 
@@ -176,16 +174,27 @@ func (r *Repository) CreateTag(_ context.Context, name, hash, message string) er
 				return domain.ErrTagAlreadyExists
 			}
 		}
-		return err
+		return fmt.Errorf("creating annotated tag %s: %w", name, err)
 	}
 
-	// Create lightweight tag.
+	// Create lightweight tag — check for an existing ref first because
+	// Storer.SetReference silently overwrites rather than erroring on duplicates.
+	existing, refErr := r.repo.Storer.Reference(plumbing.NewTagReferenceName(name))
+	if refErr != nil && !errors.Is(refErr, plumbing.ErrReferenceNotFound) {
+		return fmt.Errorf("checking existing tag %s: %w", name, refErr)
+	}
+	if existing != nil {
+		if existing.Hash().String() == hash {
+			return domain.ErrTagAlreadyExists
+		}
+		return fmt.Errorf("tag %s already exists at a different commit: %w", name, git.ErrTagExists)
+	}
 	ref := plumbing.NewReferenceFromStrings("refs/tags/"+name, hash)
 	return r.repo.Storer.SetReference(ref)
 }
 
 // PushTag pushes a tag to the remote.
-func (r *Repository) PushTag(_ context.Context, name string) error {
+func (r *Repository) PushTag(ctx context.Context, name string) error {
 	refSpec := config.RefSpec(fmt.Sprintf("refs/tags/%s:refs/tags/%s", name, name))
 
 	auth := resolveAuth()
@@ -224,6 +233,55 @@ func (r *Repository) RemoteURL(_ context.Context) (string, error) {
 		return "", fmt.Errorf("no URLs configured for remote 'origin'")
 	}
 	return urls[0], nil
+}
+
+// Stage adds the given file paths to the worktree index.
+func (r *Repository) Stage(_ context.Context, files []string) error {
+	if len(files) == 0 {
+		return nil
+	}
+	w, err := r.repo.Worktree()
+	if err != nil {
+		return fmt.Errorf("getting worktree: %w", err)
+	}
+	for _, file := range files {
+		if _, err := w.Add(file); err != nil {
+			return fmt.Errorf("staging %s: %w", file, err)
+		}
+	}
+	return nil
+}
+
+// Commit creates a commit with the given message from the current index.
+func (r *Repository) Commit(_ context.Context, message string) error {
+	w, err := r.repo.Worktree()
+	if err != nil {
+		return fmt.Errorf("getting worktree: %w", err)
+	}
+	_, err = w.Commit(message, &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "semantic-release-bot",
+			Email: "semantic-release-bot@users.noreply.github.com",
+			When:  time.Now(),
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("committing: %w", err)
+	}
+	return nil
+}
+
+// Push pushes the current branch to origin.
+func (r *Repository) Push(ctx context.Context) error {
+	auth := resolveAuth()
+	err := r.repo.Push(&git.PushOptions{
+		RemoteName: "origin",
+		Auth:       auth,
+	})
+	if err == nil || errors.Is(err, git.NoErrAlreadyUpToDate) {
+		return nil
+	}
+	return fmt.Errorf("pushing branch: %w", err)
 }
 
 func splitMessage(msg string) (subject, body string) {

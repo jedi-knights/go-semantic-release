@@ -57,7 +57,10 @@ func (r *Repository) ListTags(ctx context.Context) ([]domain.Tag, error) {
 		if line == "" {
 			continue
 		}
-		hash, _ := r.run(ctx, "rev-list", "-1", line)
+		hash, err := r.run(ctx, "rev-list", "-1", line)
+		if err != nil {
+			return nil, fmt.Errorf("resolving tag %s: %w", line, err)
+		}
 		tags = append(tags, domain.Tag{
 			Name: line,
 			Hash: hash,
@@ -113,7 +116,10 @@ func parseCommitEntry(entry string) (domain.Commit, error) {
 		return domain.Commit{}, fmt.Errorf("unexpected commit format: %q", firstLine)
 	}
 
-	date, _ := time.Parse(time.RFC3339, parts[3])
+	date, err := time.Parse(time.RFC3339, parts[3])
+	if err != nil {
+		return domain.Commit{}, fmt.Errorf("parsing commit date %q: %w", parts[3], err)
+	}
 
 	body := ""
 	if len(parts) >= 6 {
@@ -141,7 +147,14 @@ func (r *Repository) FilesChangedInCommit(ctx context.Context, hash string) ([]s
 	if output == "" {
 		return nil, nil
 	}
-	return strings.Split(output, "\n"), nil
+	lines := strings.Split(output, "\n")
+	result := make([]string, 0, len(lines))
+	for _, l := range lines {
+		if l != "" {
+			result = append(result, l)
+		}
+	}
+	return result, nil
 }
 
 func (r *Repository) CreateTag(ctx context.Context, name, hash, message string) error {
@@ -177,4 +190,23 @@ func (r *Repository) HeadHash(ctx context.Context) (string, error) {
 
 func (r *Repository) RemoteURL(ctx context.Context) (string, error) {
 	return r.run(ctx, "remote", "get-url", "origin")
+}
+
+func (r *Repository) Stage(ctx context.Context, files []string) error {
+	if len(files) == 0 {
+		return nil
+	}
+	args := append([]string{"add", "--"}, files...)
+	_, err := r.run(ctx, args...)
+	return err
+}
+
+func (r *Repository) Commit(ctx context.Context, message string) error {
+	_, err := r.run(ctx, "commit", "-m", message)
+	return err
+}
+
+func (r *Repository) Push(ctx context.Context) error {
+	_, err := r.run(ctx, "push", "origin", "HEAD")
+	return err
 }

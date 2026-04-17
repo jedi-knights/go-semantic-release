@@ -255,14 +255,14 @@ func (c *Container) buildPlugins() ([]ports.Plugin, error) {
 	logger := c.Logger()
 
 	ps := []ports.Plugin{
-		// Git plugin: verifyConditions + publish (tag + push).
+		// Git plugin: verifyConditions + publish (stage → commit → push → tag).
 		plugins.NewGitPlugin(
 			c.GitRepository(),
 			c.TagService(),
 			c.FileSystem(),
 			logger,
 			c.config.GitAuthor,
-			c.config.Prepare.AdditionalFiles,
+			c.config.Git,
 		),
 		// Commit analyzer plugin: analyzeCommits.
 		plugins.NewCommitAnalyzerPlugin(
@@ -276,9 +276,11 @@ func (c *Container) buildPlugins() ([]ports.Plugin, error) {
 		),
 	}
 
-	// Prepare plugin: update CHANGELOG.md, VERSION files.
-	// Register if the global prepare config is set OR any project defines a per-project changelog_file.
-	if c.config.Prepare.ChangelogFile != "" || c.config.Prepare.VersionFile != "" || c.config.AnyProjectDefinesChangelog() {
+	// Prepare plugin: update CHANGELOG.md, VERSION, version_files, run command.
+	// Register if any prepare option is configured OR any project defines a per-project changelog_file.
+	if c.config.Prepare.ChangelogFile != "" || c.config.Prepare.VersionFile != "" ||
+		c.config.Prepare.Command != "" || len(c.config.Prepare.VersionFiles) > 0 ||
+		c.config.AnyProjectDefinesChangelog() {
 		ps = append(ps, plugins.NewPreparePlugin(
 			c.FileSystem(),
 			logger,
@@ -350,9 +352,7 @@ func (c *Container) buildPlugins() ([]ports.Plugin, error) {
 	if len(c.config.Plugins) > 0 {
 		external, err := plugins.LoadExternalPlugins(c.config.Plugins)
 		if err != nil {
-			// Log at Error and surface to the caller so the pipeline can be gated.
 			// Return (nil, err) so callers cannot accidentally use a partial list.
-			logger.Error("failed to load external plugins", "error", err)
 			return nil, err
 		}
 		ps = append(ps, external...)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/viper"
 
 	"github.com/jedi-knights/go-semantic-release/internal/domain"
@@ -57,13 +58,19 @@ func (p *ViperProvider) Load(path string) (domain.Config, error) {
 
 	if path != "" {
 		if err := v.ReadInConfig(); err != nil {
-			if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-				return cfg, fmt.Errorf("reading config: %w", err)
-			}
+			return cfg, fmt.Errorf("reading config: %w", err)
 		}
 	}
 
-	if err := v.Unmarshal(&cfg); err != nil {
+	// StringToGitHubAssetHookFunc must run first so string values are promoted to
+	// GitHubAsset{Path: s} before mapstructure attempts its own map→struct decode.
+	if err := v.Unmarshal(&cfg, viper.DecodeHook(
+		mapstructure.ComposeDecodeHookFunc(
+			StringToGitHubAssetHookFunc(),
+			mapstructure.StringToTimeDurationHookFunc(),
+			mapstructure.StringToSliceHookFunc(","),
+		),
+	)); err != nil {
 		return cfg, fmt.Errorf("unmarshaling config: %w", err)
 	}
 
@@ -93,5 +100,8 @@ func WriteDefaultConfig(path string) error {
 	v.Set("dependency_propagation", false)
 	v.Set("github.create_release", true)
 
-	return v.WriteConfigAs(path)
+	if err := v.WriteConfigAs(path); err != nil {
+		return fmt.Errorf("writing default config to %s: %w", path, err)
+	}
+	return nil
 }

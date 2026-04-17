@@ -32,4 +32,13 @@ type GitRepository interface {
 
 	// RemoteURL returns the remote origin URL.
 	RemoteURL(ctx context.Context) (string, error)
+
+	// Stage adds the given file paths to the git index.
+	Stage(ctx context.Context, files []string) error
+
+	// Commit creates a commit with the given message using the staged index.
+	Commit(ctx context.Context, message string) error
+
+	// Push pushes the current branch to origin.
+	Push(ctx context.Context) error
 }
