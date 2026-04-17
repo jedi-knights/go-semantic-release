@@ -39,7 +39,7 @@ func TestRenderCommitMessage_NotesPlaceholder(t *testing.T) {
 	t.Parallel()
 	notes := "## 1.0.0\n\n- feat: something"
 	got := renderCommitMessage("{{.Notes}}", "svc/v1.0.0", domain.NewVersion(1, 0, 0), notes)
-	// html/template escapes '>' so check for the raw text without special chars.
+	// text/template does not HTML-escape '>' — assert the raw content is preserved.
 	if !strings.Contains(got, "feat: something") {
 		t.Errorf("expected notes content in output, got %q", got)
 	}

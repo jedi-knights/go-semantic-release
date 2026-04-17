@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"html/template"
+	"text/template"
 
 	"github.com/jedi-knights/go-semantic-release/internal/domain"
 	"github.com/jedi-knights/go-semantic-release/internal/ports"

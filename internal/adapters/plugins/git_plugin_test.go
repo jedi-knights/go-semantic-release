@@ -14,6 +14,7 @@ import (
 )
 
 func TestGitPlugin_Name(t *testing.T) {
+	t.Parallel()
 	ctrl := gomock.NewController(t)
 	p := plugins.NewGitPlugin(
 		mocks.NewMockGitRepository(ctrl),
@@ -29,6 +30,7 @@ func TestGitPlugin_Name(t *testing.T) {
 }
 
 func TestGitPlugin_VerifyConditions_PassesWhenGitAccessible(t *testing.T) {
+	t.Parallel()
 	ctrl := gomock.NewController(t)
 	mockGit := mocks.NewMockGitRepository(ctrl)
 	mockGit.EXPECT().CurrentBranch(gomock.Any()).Return("main", nil)
@@ -48,6 +50,7 @@ func TestGitPlugin_VerifyConditions_PassesWhenGitAccessible(t *testing.T) {
 }
 
 func TestGitPlugin_VerifyConditions_FailsWhenGitUnaccessible(t *testing.T) {
+	t.Parallel()
 	ctrl := gomock.NewController(t)
 	mockGit := mocks.NewMockGitRepository(ctrl)
 	mockGit.EXPECT().CurrentBranch(gomock.Any()).Return("", errors.New("not a git repo"))
@@ -67,6 +70,7 @@ func TestGitPlugin_VerifyConditions_FailsWhenGitUnaccessible(t *testing.T) {
 }
 
 func TestGitPlugin_Publish_NilProject(t *testing.T) {
+	t.Parallel()
 	ctrl := gomock.NewController(t)
 	p := plugins.NewGitPlugin(
 		mocks.NewMockGitRepository(ctrl),
@@ -88,6 +92,7 @@ func TestGitPlugin_Publish_NilProject(t *testing.T) {
 }
 
 func TestGitPlugin_Publish_CreatesAndPushesTag(t *testing.T) {
+	t.Parallel()
 	ctrl := gomock.NewController(t)
 	mockGit := mocks.NewMockGitRepository(ctrl)
 	mockTag := mocks.NewMockTagService(ctrl)
@@ -133,6 +138,7 @@ func TestGitPlugin_Publish_CreatesAndPushesTag(t *testing.T) {
 }
 
 func TestGitPlugin_Publish_HeadHashError(t *testing.T) {
+	t.Parallel()
 	ctrl := gomock.NewController(t)
 	mockGit := mocks.NewMockGitRepository(ctrl)
 	mockTag := mocks.NewMockTagService(ctrl)
@@ -163,6 +169,7 @@ func TestGitPlugin_Publish_HeadHashError(t *testing.T) {
 }
 
 func TestGitPlugin_Publish_FormatTagError(t *testing.T) {
+	t.Parallel()
 	ctrl := gomock.NewController(t)
 	mockGit := mocks.NewMockGitRepository(ctrl)
 	mockTag := mocks.NewMockTagService(ctrl)
@@ -192,6 +199,7 @@ func TestGitPlugin_Publish_FormatTagError(t *testing.T) {
 }
 
 func TestGitPlugin_Publish_PushTagError(t *testing.T) {
+	t.Parallel()
 	ctrl := gomock.NewController(t)
 	mockGit := mocks.NewMockGitRepository(ctrl)
 	mockTag := mocks.NewMockTagService(ctrl)
@@ -224,6 +232,7 @@ func TestGitPlugin_Publish_PushTagError(t *testing.T) {
 }
 
 func TestGitPlugin_Publish_TagCreationError(t *testing.T) {
+	t.Parallel()
 	ctrl := gomock.NewController(t)
 	mockGit := mocks.NewMockGitRepository(ctrl)
 	mockTag := mocks.NewMockTagService(ctrl)
@@ -255,6 +264,7 @@ func TestGitPlugin_Publish_TagCreationError(t *testing.T) {
 }
 
 func TestGitPlugin_Publish_CommitMessageIncludesNotes(t *testing.T) {
+	t.Parallel()
 	ctrl := gomock.NewController(t)
 	mockGit := mocks.NewMockGitRepository(ctrl)
 	mockTag := mocks.NewMockTagService(ctrl)
@@ -266,6 +276,9 @@ func TestGitPlugin_Publish_CommitMessageIncludesNotes(t *testing.T) {
 		func(_ context.Context, msg string) error {
 			if !strings.Contains(msg, "chore(release): 1.0.0") {
 				t.Errorf("commit message missing version, got: %q", msg)
+			}
+			if !strings.Contains(msg, "[skip ci]") {
+				t.Errorf("commit message missing [skip ci] token, got: %q", msg)
 			}
 			if !strings.Contains(msg, "## 1.0.0") {
 				t.Errorf("commit message missing release notes, got: %q", msg)
@@ -303,6 +316,7 @@ func TestGitPlugin_Publish_CommitMessageIncludesNotes(t *testing.T) {
 }
 
 func TestGitPlugin_Publish_StagesCommitsAndPushesAssetsBeforeTagging(t *testing.T) {
+	t.Parallel()
 	ctrl := gomock.NewController(t)
 	mockGit := mocks.NewMockGitRepository(ctrl)
 	mockTag := mocks.NewMockTagService(ctrl)
@@ -347,6 +361,7 @@ func TestGitPlugin_Publish_StagesCommitsAndPushesAssetsBeforeTagging(t *testing.
 }
 
 func TestGitPlugin_Publish_SkipsCommitWhenNoAssets(t *testing.T) {
+	t.Parallel()
 	ctrl := gomock.NewController(t)
 	mockGit := mocks.NewMockGitRepository(ctrl)
 	mockTag := mocks.NewMockTagService(ctrl)
@@ -379,6 +394,7 @@ func TestGitPlugin_Publish_SkipsCommitWhenNoAssets(t *testing.T) {
 }
 
 func TestGitPlugin_Publish_StageError(t *testing.T) {
+	t.Parallel()
 	ctrl := gomock.NewController(t)
 	mockGit := mocks.NewMockGitRepository(ctrl)
 	mockTag := mocks.NewMockTagService(ctrl)
@@ -409,6 +425,7 @@ func TestGitPlugin_Publish_StageError(t *testing.T) {
 }
 
 func TestGitPlugin_Publish_CommitError(t *testing.T) {
+	t.Parallel()
 	ctrl := gomock.NewController(t)
 	mockGit := mocks.NewMockGitRepository(ctrl)
 	mockTag := mocks.NewMockTagService(ctrl)
@@ -440,6 +457,7 @@ func TestGitPlugin_Publish_CommitError(t *testing.T) {
 }
 
 func TestGitPlugin_Publish_PushBranchError(t *testing.T) {
+	t.Parallel()
 	ctrl := gomock.NewController(t)
 	mockGit := mocks.NewMockGitRepository(ctrl)
 	mockTag := mocks.NewMockTagService(ctrl)

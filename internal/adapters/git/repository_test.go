@@ -19,6 +19,7 @@ import (
 // ---------------------------------------------------------------------------
 
 func TestParseCommitEntry_Basic(t *testing.T) {
+	t.Parallel()
 	entry := "abc1234|John Doe|john@example.com|2024-01-15T10:30:00Z|feat: add login|"
 
 	got, err := parseCommitEntry(entry)
@@ -49,6 +50,7 @@ func TestParseCommitEntry_Basic(t *testing.T) {
 }
 
 func TestParseCommitEntry_WithBody(t *testing.T) {
+	t.Parallel()
 	// Body delivered on a second line (as git log %b emits it).
 	entry := "abc1234|Jane Smith|jane@example.com|2024-02-01T08:00:00Z|fix: correct panic|\nThis fixes the crash in the auth handler."
 
@@ -57,12 +59,14 @@ func TestParseCommitEntry_WithBody(t *testing.T) {
 		t.Fatalf("parseCommitEntry: unexpected error: %v", err)
 	}
 
-	if got.Body == "" {
-		t.Error("Body is empty, want non-empty body")
+	const wantBody = "This fixes the crash in the auth handler."
+	if got.Body != wantBody {
+		t.Errorf("Body = %q, want %q", got.Body, wantBody)
 	}
 }
 
 func TestParseCommitEntry_TooFewFields(t *testing.T) {
+	t.Parallel()
 	entry := "abc|author"
 
 	_, err := parseCommitEntry(entry)
@@ -72,17 +76,11 @@ func TestParseCommitEntry_TooFewFields(t *testing.T) {
 }
 
 func TestParseCommitEntry_InvalidDate(t *testing.T) {
-	// time.Parse returns the zero value on failure; parseCommitEntry ignores the error.
+	t.Parallel()
 	entry := "abc1234|Author Name|author@example.com|not-a-date|chore: update deps|"
-
-	got, err := parseCommitEntry(entry)
-	if err != nil {
-		t.Fatalf("parseCommitEntry: unexpected error: %v", err)
-	}
-
-	// Expect zero time — time.Parse fails silently and the result discards the error.
-	if !got.Date.IsZero() {
-		t.Errorf("Date = %v, want zero time for invalid date input", got.Date)
+	_, err := parseCommitEntry(entry)
+	if err == nil {
+		t.Fatal("expected error for invalid date, got nil")
 	}
 }
 
@@ -91,6 +89,7 @@ func TestParseCommitEntry_InvalidDate(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestParseCommitLog_MultipleEntries(t *testing.T) {
+	t.Parallel()
 	entry1 := "aaa111|Alice|alice@example.com|2024-03-01T12:00:00Z|feat: feature one|"
 	entry2 := "bbb222|Bob|bob@example.com|2024-03-02T12:00:00Z|fix: fix two|"
 	output := entry1 + "\x00" + entry2
@@ -111,6 +110,7 @@ func TestParseCommitLog_MultipleEntries(t *testing.T) {
 }
 
 func TestParseCommitLog_SkipsEmpty(t *testing.T) {
+	t.Parallel()
 	// Trailing NUL produces an empty entry that should be skipped, not appended.
 	entry := "ccc333|Carol|carol@example.com|2024-04-01T10:00:00Z|docs: update readme|"
 	output := entry + "\x00"
@@ -125,6 +125,7 @@ func TestParseCommitLog_SkipsEmpty(t *testing.T) {
 }
 
 func TestParseCommitLog_SkipsUnparseable(t *testing.T) {
+	t.Parallel()
 	// First entry has too few fields (unparseable); second entry is valid.
 	bad := "bad|entry"
 	good := "ddd444|Dave|dave@example.com|2024-05-01T09:00:00Z|ci: configure pipeline|"
@@ -143,6 +144,7 @@ func TestParseCommitLog_SkipsUnparseable(t *testing.T) {
 }
 
 func TestParseCommitLog_Empty(t *testing.T) {
+	t.Parallel()
 	commits, err := parseCommitLog("")
 	if err != nil {
 		t.Fatalf("parseCommitLog: %v", err)
@@ -190,7 +192,10 @@ func addTestCommit(t *testing.T, dir, file, content, msg string) string {
 			t.Fatalf("git %v: %s: %v", args, out, err)
 		}
 	}
-	out, _ := exec.CommandContext(context.Background(), "git", "-C", dir, "rev-parse", "HEAD").Output()
+	out, err := exec.CommandContext(context.Background(), "git", "-C", dir, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatalf("git rev-parse HEAD: %v", err)
+	}
 	return strings.TrimSpace(string(out))
 }
 
@@ -199,6 +204,7 @@ func addTestCommit(t *testing.T, dir, file, content, msg string) string {
 // ---------------------------------------------------------------------------
 
 func TestRepository_CurrentBranch(t *testing.T) {
+	t.Parallel()
 	dir, repo := newTestGitRepo(t)
 	// A branch only exists after the first commit.
 	addTestCommit(t, dir, "README", "hello", "chore: initial commit")
@@ -217,6 +223,7 @@ func TestRepository_CurrentBranch(t *testing.T) {
 }
 
 func TestRepository_ListTags_Empty(t *testing.T) {
+	t.Parallel()
 	dir, repo := newTestGitRepo(t)
 	addTestCommit(t, dir, "README", "hello", "chore: initial commit")
 
@@ -230,6 +237,7 @@ func TestRepository_ListTags_Empty(t *testing.T) {
 }
 
 func TestRepository_ListTags_WithTag(t *testing.T) {
+	t.Parallel()
 	dir, repo := newTestGitRepo(t)
 	hash := addTestCommit(t, dir, "README", "hello", "chore: initial commit")
 
@@ -252,6 +260,7 @@ func TestRepository_ListTags_WithTag(t *testing.T) {
 }
 
 func TestRepository_CommitsSince_All(t *testing.T) {
+	t.Parallel()
 	dir, repo := newTestGitRepo(t)
 	addTestCommit(t, dir, "a.txt", "a", "feat: first")
 	addTestCommit(t, dir, "b.txt", "b", "feat: second")
@@ -267,6 +276,7 @@ func TestRepository_CommitsSince_All(t *testing.T) {
 }
 
 func TestRepository_CommitsSince_Since(t *testing.T) {
+	t.Parallel()
 	dir, repo := newTestGitRepo(t)
 	firstHash := addTestCommit(t, dir, "a.txt", "a", "feat: first")
 	addTestCommit(t, dir, "b.txt", "b", "feat: second")
@@ -285,6 +295,7 @@ func TestRepository_CommitsSince_Since(t *testing.T) {
 }
 
 func TestRepository_HeadHash(t *testing.T) {
+	t.Parallel()
 	dir, repo := newTestGitRepo(t)
 	addTestCommit(t, dir, "README", "hello", "chore: initial commit")
 
@@ -298,6 +309,7 @@ func TestRepository_HeadHash(t *testing.T) {
 }
 
 func TestRepository_FilesChangedInCommit(t *testing.T) {
+	t.Parallel()
 	dir, repo := newTestGitRepo(t)
 	// git diff-tree --no-commit-id needs a parent commit to produce output; add
 	// a setup commit first, then the commit we actually want to inspect.
@@ -317,6 +329,7 @@ func TestRepository_FilesChangedInCommit(t *testing.T) {
 }
 
 func TestRepository_CreateTag_Lightweight(t *testing.T) {
+	t.Parallel()
 	dir, repo := newTestGitRepo(t)
 	hash := addTestCommit(t, dir, "README", "hello", "chore: initial commit")
 
@@ -336,6 +349,7 @@ func TestRepository_CreateTag_Lightweight(t *testing.T) {
 }
 
 func TestRepository_CreateTag_Annotated(t *testing.T) {
+	t.Parallel()
 	dir, repo := newTestGitRepo(t)
 	hash := addTestCommit(t, dir, "README", "hello", "chore: initial commit")
 
@@ -354,6 +368,7 @@ func TestRepository_CreateTag_Annotated(t *testing.T) {
 }
 
 func TestRepository_CreateTag_Duplicate_SameHash(t *testing.T) {
+	t.Parallel()
 	dir, repo := newTestGitRepo(t)
 	hash := addTestCommit(t, dir, "README", "hello", "chore: initial commit")
 
@@ -373,6 +388,7 @@ func TestRepository_CreateTag_Duplicate_SameHash(t *testing.T) {
 }
 
 func TestRepository_PushTag_NoRemote(t *testing.T) {
+	t.Parallel()
 	dir, repo := newTestGitRepo(t)
 	addTestCommit(t, dir, "README", "hello", "chore: initial commit")
 
@@ -384,6 +400,7 @@ func TestRepository_PushTag_NoRemote(t *testing.T) {
 }
 
 func TestRepository_RemoteURL_NoRemote(t *testing.T) {
+	t.Parallel()
 	_, repo := newTestGitRepo(t)
 
 	// Without any remote configured, RemoteURL must return an error.
@@ -394,6 +411,7 @@ func TestRepository_RemoteURL_NoRemote(t *testing.T) {
 }
 
 func TestRepository_Stage_StagesFiles(t *testing.T) {
+	t.Parallel()
 	dir, repo := newTestGitRepo(t)
 	addTestCommit(t, dir, "initial.txt", "init", "chore: initial commit")
 
@@ -415,6 +433,7 @@ func TestRepository_Stage_StagesFiles(t *testing.T) {
 }
 
 func TestRepository_Stage_EmptyList(t *testing.T) {
+	t.Parallel()
 	_, repo := newTestGitRepo(t)
 	// Stage with an empty file list must be a no-op (no error, no git invocation).
 	if err := repo.Stage(context.Background(), []string{}); err != nil {
@@ -423,6 +442,7 @@ func TestRepository_Stage_EmptyList(t *testing.T) {
 }
 
 func TestRepository_Commit_CreatesCommit(t *testing.T) {
+	t.Parallel()
 	dir, repo := newTestGitRepo(t)
 	addTestCommit(t, dir, "initial.txt", "init", "chore: initial commit")
 
@@ -449,6 +469,7 @@ func TestRepository_Commit_CreatesCommit(t *testing.T) {
 }
 
 func TestRepository_Push_NoRemote(t *testing.T) {
+	t.Parallel()
 	dir, repo := newTestGitRepo(t)
 	addTestCommit(t, dir, "README", "hello", "chore: initial commit")
 

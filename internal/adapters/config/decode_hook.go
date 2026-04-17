@@ -14,7 +14,7 @@ import (
 // glob strings alongside the new structured {path, label} form.
 func StringToGitHubAssetHookFunc() mapstructure.DecodeHookFuncType {
 	assetType := reflect.TypeOf(domain.GitHubAsset{})
-	return func(f reflect.Type, t reflect.Type, data interface{}) (interface{}, error) {
+	return func(f reflect.Type, t reflect.Type, data any) (any, error) {
 		if t != assetType {
 			return data, nil
 		}

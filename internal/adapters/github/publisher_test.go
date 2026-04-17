@@ -179,7 +179,7 @@ func TestPlugin_UploadAsset_Success(t *testing.T) {
 	p := NewPlugin(pluginCfg(), testLogger{})
 	p.client = &http.Client{Transport: redirectToServer(srv)}
 
-	if err := p.uploadAsset(context.Background(), 1, filePath, ""); err != nil {
+	if err := p.uploadAsset(context.Background(), srv.URL+"/upload", filePath, ""); err != nil {
 		t.Errorf("uploadAsset: %v", err)
 	}
 }
@@ -202,7 +202,7 @@ func TestPlugin_UploadAsset_WithLabel_IncludesLabelInURL(t *testing.T) {
 	p := NewPlugin(pluginCfg(), testLogger{})
 	p.client = &http.Client{Transport: redirectToServer(srv)}
 
-	if err := p.uploadAsset(context.Background(), 1, filePath, "Source Tarballs"); err != nil {
+	if err := p.uploadAsset(context.Background(), srv.URL+"/upload", filePath, "Source Tarballs"); err != nil {
 		t.Fatalf("uploadAsset: %v", err)
 	}
 	if !strings.Contains(gotQuery, "label=Source+Tarballs") && !strings.Contains(gotQuery, "label=Source%20Tarballs") {
@@ -228,7 +228,7 @@ func TestPlugin_UploadAsset_WithoutLabel_NoLabelParam(t *testing.T) {
 	p := NewPlugin(pluginCfg(), testLogger{})
 	p.client = &http.Client{Transport: redirectToServer(srv)}
 
-	if err := p.uploadAsset(context.Background(), 1, filePath, ""); err != nil {
+	if err := p.uploadAsset(context.Background(), srv.URL+"/upload", filePath, ""); err != nil {
 		t.Fatalf("uploadAsset: %v", err)
 	}
 	if strings.Contains(gotQuery, "label") {
@@ -252,7 +252,7 @@ func TestPlugin_UploadAsset_NonCreated(t *testing.T) {
 	p := NewPlugin(pluginCfg(), testLogger{})
 	p.client = &http.Client{Transport: redirectToServer(srv)}
 
-	if err := p.uploadAsset(context.Background(), 1, filePath, ""); err == nil {
+	if err := p.uploadAsset(context.Background(), srv.URL+"/upload", filePath, ""); err == nil {
 		t.Fatal("expected error for non-201 response, got nil")
 	}
 }
@@ -261,7 +261,7 @@ func TestPlugin_UploadAsset_MissingFile(t *testing.T) {
 	t.Parallel()
 	p := NewPlugin(pluginCfg(), testLogger{})
 	// Pointing at a non-existent file should fail before any HTTP request.
-	if err := p.uploadAsset(context.Background(), 1, "/nonexistent/path/asset.bin", ""); err == nil {
+	if err := p.uploadAsset(context.Background(), "https://uploads.example.com/upload", "/nonexistent/path/asset.bin", ""); err == nil {
 		t.Fatal("expected error for missing file, got nil")
 	}
 }
@@ -279,7 +279,7 @@ func TestPlugin_UploadAssetGlob_NoMatches(t *testing.T) {
 	p := NewPlugin(pluginCfg(), testLogger{})
 	p.client = &http.Client{Transport: redirectToServer(srv)}
 
-	if err := p.uploadAssetGlob(context.Background(), 1, domain.GitHubAsset{Path: "/nonexistent/*.xyz"}); err != nil {
+	if err := p.uploadAssetGlob(context.Background(), srv.URL+"/upload", domain.GitHubAsset{Path: "/nonexistent/*.xyz"}); err != nil {
 		t.Errorf("uploadAssetGlob no-matches: %v", err)
 	}
 	if called {
@@ -306,7 +306,7 @@ func TestPlugin_UploadAssetGlob_Success(t *testing.T) {
 	p := NewPlugin(pluginCfg(), testLogger{})
 	p.client = &http.Client{Transport: redirectToServer(srv)}
 
-	if err := p.uploadAssetGlob(context.Background(), 1, domain.GitHubAsset{Path: filepath.Join(dir, "*")}); err != nil {
+	if err := p.uploadAssetGlob(context.Background(), srv.URL+"/upload", domain.GitHubAsset{Path: filepath.Join(dir, "*")}); err != nil {
 		t.Errorf("uploadAssetGlob: %v", err)
 	}
 	if uploadCount != 2 {
@@ -333,7 +333,7 @@ func TestPlugin_UploadAssetGlob_PassesLabelToUpload(t *testing.T) {
 	p.client = &http.Client{Transport: redirectToServer(srv)}
 
 	asset := domain.GitHubAsset{Path: filepath.Join(dir, "*.tar.gz"), Label: "Release Tarball"}
-	if err := p.uploadAssetGlob(context.Background(), 1, asset); err != nil {
+	if err := p.uploadAssetGlob(context.Background(), srv.URL+"/upload", asset); err != nil {
 		t.Fatalf("uploadAssetGlob: %v", err)
 	}
 	if !strings.Contains(gotQuery, "label=") {
@@ -494,7 +494,7 @@ func TestPlugin_UploadAssetGlob_BadPattern(t *testing.T) {
 	t.Parallel()
 	// An unclosed bracket is a syntax error in filepath.Glob.
 	p := NewPlugin(pluginCfg(), testLogger{})
-	err := p.uploadAssetGlob(context.Background(), 1, domain.GitHubAsset{Path: "[invalid"})
+	err := p.uploadAssetGlob(context.Background(), "https://uploads.example.com/upload", domain.GitHubAsset{Path: "[invalid"})
 	if err == nil {
 		t.Fatal("expected error for bad glob pattern, got nil")
 	}
@@ -520,7 +520,7 @@ func TestPlugin_UploadAssetGlob_UploadError(t *testing.T) {
 	p := NewPlugin(pluginCfg(), testLogger{})
 	p.client = &http.Client{Transport: redirectToServer(srv)}
 
-	err := p.uploadAssetGlob(context.Background(), 1, domain.GitHubAsset{Path: filePath})
+	err := p.uploadAssetGlob(context.Background(), srv.URL+"/upload", domain.GitHubAsset{Path: filePath})
 	if err == nil {
 		t.Fatal("expected error when upload fails, got nil")
 	}
@@ -539,7 +539,7 @@ func TestPlugin_UploadAsset_NetworkError(t *testing.T) {
 	}
 
 	p := pluginWithTransport(errTransport{})
-	if err := p.uploadAsset(context.Background(), 1, filePath, ""); err == nil {
+	if err := p.uploadAsset(context.Background(), "https://uploads.example.com/upload", filePath, ""); err == nil {
 		t.Fatal("expected error from network failure, got nil")
 	}
 }
@@ -563,7 +563,7 @@ func TestPlugin_UploadAsset_UnknownExtension_DefaultsMIMEType(t *testing.T) {
 	p := NewPlugin(pluginCfg(), testLogger{})
 	p.client = &http.Client{Transport: redirectToServer(srv)}
 
-	if err := p.uploadAsset(context.Background(), 1, filePath, ""); err != nil {
+	if err := p.uploadAsset(context.Background(), srv.URL+"/upload", filePath, ""); err != nil {
 		t.Errorf("uploadAsset: %v", err)
 	}
 	if gotContentType != "application/octet-stream" {
@@ -689,7 +689,9 @@ func TestPlugin_AddLabelsToIssue_EmptyLabels(t *testing.T) {
 	p := NewPlugin(pluginCfg(), testLogger{})
 	p.client = &http.Client{Transport: redirectToServer(srv)}
 
-	p.addLabelsToIssue(context.Background(), 1, []string{})
+	if err := p.addLabelsToIssue(context.Background(), 1, []string{}); err != nil {
+		t.Errorf("addLabelsToIssue with empty labels: %v", err)
+	}
 	if called {
 		t.Error("expected no HTTP call for empty labels, got one")
 	}
@@ -700,15 +702,36 @@ func TestPlugin_AddLabelsToIssue_InvalidAPIURL(t *testing.T) {
 	cfg := pluginCfg()
 	cfg.APIURL = "://bad-url"
 	p := NewPlugin(cfg, testLogger{})
-	// Errors are silently discarded — verify no panic.
-	p.addLabelsToIssue(context.Background(), 1, []string{"released"})
+	err := p.addLabelsToIssue(context.Background(), 1, []string{"released"})
+	if err == nil {
+		t.Fatal("expected error for invalid APIURL, got nil")
+	}
 }
 
 func TestPlugin_AddLabelsToIssue_NetworkError(t *testing.T) {
 	t.Parallel()
 	p := pluginWithTransport(errTransport{})
-	// Errors are silently discarded — verify no panic.
-	p.addLabelsToIssue(context.Background(), 1, []string{"released"})
+	err := p.addLabelsToIssue(context.Background(), 1, []string{"released"})
+	if err == nil {
+		t.Fatal("expected error from network failure, got nil")
+	}
+}
+
+func TestPlugin_AddLabelsToIssue_NonOKStatus(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"message":"Resource not accessible"}`))
+	}))
+	defer srv.Close()
+
+	cfg := pluginCfg()
+	cfg.APIURL = srv.URL
+	p := NewPlugin(cfg, testLogger{})
+	err := p.addLabelsToIssue(context.Background(), 1, []string{"released"})
+	if err == nil {
+		t.Fatal("expected error for non-OK HTTP status, got nil")
+	}
 }
 
 // ---------------------------------------------------------------------------

@@ -7,6 +7,7 @@ import (
 )
 
 func TestConfig_AnyProjectDefinesChangelog(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		projects []domain.ProjectConfig
@@ -45,6 +46,7 @@ func TestConfig_AnyProjectDefinesChangelog(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cfg := domain.Config{Projects: tt.projects}
 			if got := cfg.AnyProjectDefinesChangelog(); got != tt.want {
 				t.Errorf("AnyProjectDefinesChangelog() = %v, want %v", got, tt.want)
@@ -54,6 +56,7 @@ func TestConfig_AnyProjectDefinesChangelog(t *testing.T) {
 }
 
 func TestConfig_IsInteractive(t *testing.T) {
+	t.Parallel()
 	trueVal := true
 	falseVal := false
 
@@ -69,6 +72,7 @@ func TestConfig_IsInteractive(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cfg := domain.Config{Interactive: tt.interactive}
 			if got := cfg.IsInteractive(); got != tt.want {
 				t.Errorf("IsInteractive() = %v, want %v", got, tt.want)
@@ -78,6 +82,7 @@ func TestConfig_IsInteractive(t *testing.T) {
 }
 
 func TestParseVersionFileEntry_PlainPath(t *testing.T) {
+	t.Parallel()
 	e := domain.ParseVersionFileEntry("VERSION")
 	if e.Path != "VERSION" {
 		t.Errorf("Path = %q, want %q", e.Path, "VERSION")
@@ -88,6 +93,7 @@ func TestParseVersionFileEntry_PlainPath(t *testing.T) {
 }
 
 func TestParseVersionFileEntry_TOMLKeyPath(t *testing.T) {
+	t.Parallel()
 	e := domain.ParseVersionFileEntry("pyproject.toml:tool.poetry.version")
 	if e.Path != "pyproject.toml" {
 		t.Errorf("Path = %q, want %q", e.Path, "pyproject.toml")
@@ -98,6 +104,7 @@ func TestParseVersionFileEntry_TOMLKeyPath(t *testing.T) {
 }
 
 func TestParseVersionFileEntry_EmptyKeyPath(t *testing.T) {
+	t.Parallel()
 	// A trailing colon means the file has an explicitly empty key path.
 	e := domain.ParseVersionFileEntry("some.toml:")
 	if e.Path != "some.toml" {
@@ -109,6 +116,7 @@ func TestParseVersionFileEntry_EmptyKeyPath(t *testing.T) {
 }
 
 func TestDefaultConfig_SensibleDefaults(t *testing.T) {
+	t.Parallel()
 	cfg := domain.DefaultConfig()
 
 	if cfg.ReleaseMode != domain.ReleaseModeRepo {

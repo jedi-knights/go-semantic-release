@@ -20,7 +20,11 @@ func TestViperProvider_Load_NoConfigFile_ReturnsDefaults(t *testing.T) {
 	if chErr := os.Chdir(dir); chErr != nil {
 		t.Fatalf("chdir: %v", chErr)
 	}
-	t.Cleanup(func() { _ = os.Chdir(orig) })
+	t.Cleanup(func() {
+		if cdErr := os.Chdir(orig); cdErr != nil {
+			t.Errorf("restoring working directory: %v", cdErr)
+		}
+	})
 
 	p := config.NewViperProvider()
 	cfg, err := p.Load("")

@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/jedi-knights/go-semantic-release/internal/domain"
 	"github.com/jedi-knights/go-semantic-release/internal/ports"
@@ -71,7 +72,7 @@ func NewPlugin(cfg PluginConfig, logger ports.Logger) *Plugin {
 	}
 	return &Plugin{
 		config: cfg,
-		client: &http.Client{},
+		client: &http.Client{Timeout: 30 * time.Second},
 		logger: logger,
 	}
 }
@@ -99,7 +100,7 @@ func (p *Plugin) VerifyConditions(ctx context.Context, rc *domain.ReleaseContext
 	}
 
 	// Verify token is valid with a lightweight API call.
-	url := fmt.Sprintf("%s/repos/%s/%s", p.config.APIURL, owner, repo)
+	url := fmt.Sprintf("%s/repos/%s/%s", p.config.APIURL, neturl.PathEscape(owner), neturl.PathEscape(repo))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return fmt.Errorf("creating request: %w", err)
@@ -118,7 +119,7 @@ func (p *Plugin) VerifyConditions(ctx context.Context, rc *domain.ReleaseContext
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("GitHub API returned HTTP %d for repo verification", resp.StatusCode)
 	}
-
+	_, _ = io.Copy(io.Discard, resp.Body)
 	return nil
 }
 
@@ -152,7 +153,7 @@ func (p *Plugin) Publish(ctx context.Context, rc *domain.ReleaseContext) (*domai
 
 	// Upload assets.
 	for _, asset := range p.config.Assets {
-		if err := p.uploadAssetGlob(ctx, releaseResp.ID, asset); err != nil {
+		if err := p.uploadAssetGlob(ctx, releaseResp.UploadURL, asset); err != nil {
 			p.logger.Warn("failed to upload asset", "pattern", asset.Path, "error", err)
 		}
 	}
@@ -193,7 +194,7 @@ func (p *Plugin) AddChannel(ctx context.Context, rc *domain.ReleaseContext) erro
 		return fmt.Errorf("marshaling release update: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/repos/%s/%s/releases/%d", p.config.APIURL, p.config.Owner, p.config.Repo, release.ID)
+	url := fmt.Sprintf("%s/repos/%s/%s/releases/%d", p.config.APIURL, neturl.PathEscape(p.config.Owner), neturl.PathEscape(p.config.Repo), release.ID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, url, bytes.NewReader(jsonData))
 	if err != nil {
 		return err
@@ -248,7 +249,9 @@ func (p *Plugin) Success(ctx context.Context, rc *domain.ReleaseContext) error {
 			if err := p.commentOnIssue(ctx, pr.Number, comment); err != nil {
 				p.logger.Debug("failed to comment on PR", "number", pr.Number, "error", err)
 			}
-			p.addLabelsToIssue(ctx, pr.Number, p.config.ReleasedLabels)
+			if err := p.addLabelsToIssue(ctx, pr.Number, p.config.ReleasedLabels); err != nil {
+				p.logger.Warn("failed to add labels to PR", "number", pr.Number, "error", err)
+			}
 		}
 	}
 
@@ -321,7 +324,7 @@ func (p *Plugin) createGHRelease(ctx context.Context, reqBody ghCreateReleaseReq
 		return nil, fmt.Errorf("marshaling release request: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/repos/%s/%s/releases", p.config.APIURL, p.config.Owner, p.config.Repo)
+	url := fmt.Sprintf("%s/repos/%s/%s/releases", p.config.APIURL, neturl.PathEscape(p.config.Owner), neturl.PathEscape(p.config.Repo))
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
@@ -347,7 +350,7 @@ func (p *Plugin) createGHRelease(ctx context.Context, reqBody ghCreateReleaseReq
 }
 
 func (p *Plugin) getReleaseByTag(ctx context.Context, tag string) (*ghRelease, error) {
-	url := fmt.Sprintf("%s/repos/%s/%s/releases/tags/%s", p.config.APIURL, p.config.Owner, p.config.Repo, tag)
+	url := fmt.Sprintf("%s/repos/%s/%s/releases/tags/%s", p.config.APIURL, neturl.PathEscape(p.config.Owner), neturl.PathEscape(p.config.Repo), neturl.PathEscape(tag))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return nil, err
@@ -374,21 +377,21 @@ func (p *Plugin) getReleaseByTag(ctx context.Context, tag string) (*ghRelease, e
 	return &release, nil
 }
 
-func (p *Plugin) uploadAssetGlob(ctx context.Context, releaseID int, asset domain.GitHubAsset) error {
+func (p *Plugin) uploadAssetGlob(ctx context.Context, uploadURL string, asset domain.GitHubAsset) error {
 	matches, err := filepath.Glob(asset.Path)
 	if err != nil {
 		return fmt.Errorf("globbing %s: %w", asset.Path, err)
 	}
 
 	for _, path := range matches {
-		if err := p.uploadAsset(ctx, releaseID, path, asset.Label); err != nil {
+		if err := p.uploadAsset(ctx, uploadURL, path, asset.Label); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (p *Plugin) uploadAsset(ctx context.Context, releaseID int, filePath, label string) error {
+func (p *Plugin) uploadAsset(ctx context.Context, uploadURL, filePath, label string) error {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return fmt.Errorf("opening %s: %w", filePath, err)
@@ -406,15 +409,19 @@ func (p *Plugin) uploadAsset(ctx context.Context, releaseID int, filePath, label
 		contentType = "application/octet-stream"
 	}
 
+	// Strip the URI template suffix (e.g. "{?name,label}") that GitHub appends to upload_url.
+	base := uploadURL
+	if i := strings.Index(base, "{"); i >= 0 {
+		base = base[:i]
+	}
 	q := neturl.Values{}
 	q.Set("name", name)
 	if label != "" {
 		q.Set("label", label)
 	}
-	uploadURL := fmt.Sprintf("https://uploads.github.com/repos/%s/%s/releases/%d/assets?%s",
-		p.config.Owner, p.config.Repo, releaseID, q.Encode())
+	fullUploadURL := base + "?" + q.Encode()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, uploadURL, file)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fullUploadURL, file)
 	if err != nil {
 		return fmt.Errorf("creating upload request: %w", err)
 	}
@@ -434,12 +441,12 @@ func (p *Plugin) uploadAsset(ctx context.Context, releaseID int, filePath, label
 		return fmt.Errorf("upload asset failed (%d): %s", resp.StatusCode, string(body))
 	}
 
-	p.logger.Info("uploaded asset", "file", name, "release", releaseID)
+	p.logger.Info("uploaded asset", "file", name)
 	return nil
 }
 
 func (p *Plugin) getPRsForCommit(ctx context.Context, sha string) ([]ghPR, error) {
-	url := fmt.Sprintf("%s/repos/%s/%s/commits/%s/pulls", p.config.APIURL, p.config.Owner, p.config.Repo, sha)
+	url := fmt.Sprintf("%s/repos/%s/%s/commits/%s/pulls", p.config.APIURL, neturl.PathEscape(p.config.Owner), neturl.PathEscape(p.config.Repo), sha)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return nil, err
@@ -470,7 +477,7 @@ func (p *Plugin) commentOnIssue(ctx context.Context, number int, body string) er
 		return fmt.Errorf("marshaling comment: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/repos/%s/%s/issues/%d/comments", p.config.APIURL, p.config.Owner, p.config.Repo, number)
+	url := fmt.Sprintf("%s/repos/%s/%s/issues/%d/comments", p.config.APIURL, neturl.PathEscape(p.config.Owner), neturl.PathEscape(p.config.Repo), number)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonData))
 	if err != nil {
 		return err
@@ -489,34 +496,50 @@ func (p *Plugin) commentOnIssue(ctx context.Context, number int, body string) er
 	return nil
 }
 
-func (p *Plugin) addLabelsToIssue(ctx context.Context, number int, labels []string) {
+func (p *Plugin) addLabelsToIssue(ctx context.Context, number int, labels []string) error {
 	if len(labels) == 0 {
-		return
+		return nil
 	}
 	payload := map[string][]string{"labels": labels}
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
-		return
+		return fmt.Errorf("marshaling labels: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/repos/%s/%s/issues/%d/labels", p.config.APIURL, p.config.Owner, p.config.Repo, number)
+	url := fmt.Sprintf("%s/repos/%s/%s/issues/%d/labels",
+		p.config.APIURL,
+		neturl.PathEscape(p.config.Owner),
+		neturl.PathEscape(p.config.Repo),
+		number)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonData))
 	if err != nil {
-		return
+		return fmt.Errorf("creating request: %w", err)
 	}
 	p.setHeaders(req)
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return
+		return fmt.Errorf("adding labels: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("adding labels failed (HTTP %d): %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
 	_, _ = io.Copy(io.Discard, resp.Body)
+	return nil
 }
 
 func (p *Plugin) findFailureIssue(ctx context.Context, title string) (*ghIssue, error) {
-	url := fmt.Sprintf("%s/repos/%s/%s/issues?state=open&labels=%s&creator=app",
-		p.config.APIURL, p.config.Owner, p.config.Repo, strings.Join(p.config.FailLabels, ","))
+	q := neturl.Values{
+		"state":  {"open"},
+		"labels": {strings.Join(p.config.FailLabels, ",")},
+	}
+	url := fmt.Sprintf("%s/repos/%s/%s/issues?%s",
+		p.config.APIURL,
+		neturl.PathEscape(p.config.Owner),
+		neturl.PathEscape(p.config.Repo),
+		q.Encode())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return nil, err
@@ -558,7 +581,7 @@ func (p *Plugin) createIssue(ctx context.Context, title, body string, labels []s
 		return fmt.Errorf("marshaling issue: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/repos/%s/%s/issues", p.config.APIURL, p.config.Owner, p.config.Repo)
+	url := fmt.Sprintf("%s/repos/%s/%s/issues", p.config.APIURL, neturl.PathEscape(p.config.Owner), neturl.PathEscape(p.config.Repo))
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonData))
 	if err != nil {
 		return err

@@ -57,7 +57,10 @@ func (r *Repository) ListTags(ctx context.Context) ([]domain.Tag, error) {
 		if line == "" {
 			continue
 		}
-		hash, _ := r.run(ctx, "rev-list", "-1", line)
+		hash, err := r.run(ctx, "rev-list", "-1", line)
+		if err != nil {
+			return nil, fmt.Errorf("resolving tag %s: %w", line, err)
+		}
 		tags = append(tags, domain.Tag{
 			Name: line,
 			Hash: hash,
@@ -113,7 +116,10 @@ func parseCommitEntry(entry string) (domain.Commit, error) {
 		return domain.Commit{}, fmt.Errorf("unexpected commit format: %q", firstLine)
 	}
 
-	date, _ := time.Parse(time.RFC3339, parts[3])
+	date, err := time.Parse(time.RFC3339, parts[3])
+	if err != nil {
+		return domain.Commit{}, fmt.Errorf("parsing commit date %q: %w", parts[3], err)
+	}
 
 	body := ""
 	if len(parts) >= 6 {
@@ -141,7 +147,14 @@ func (r *Repository) FilesChangedInCommit(ctx context.Context, hash string) ([]s
 	if output == "" {
 		return nil, nil
 	}
-	return strings.Split(output, "\n"), nil
+	lines := strings.Split(output, "\n")
+	result := make([]string, 0, len(lines))
+	for _, l := range lines {
+		if l != "" {
+			result = append(result, l)
+		}
+	}
+	return result, nil
 }
 
 func (r *Repository) CreateTag(ctx context.Context, name, hash, message string) error {

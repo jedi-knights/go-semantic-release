@@ -1,11 +1,12 @@
 package gogit
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -79,8 +80,8 @@ func (r *Repository) ListTags(_ context.Context) ([]domain.Tag, error) {
 	}
 
 	// Sort by name descending (version sort).
-	sort.Slice(tags, func(i, j int) bool {
-		return tags[i].Name > tags[j].Name
+	slices.SortFunc(tags, func(a, b domain.Tag) int {
+		return cmp.Compare(b.Name, a.Name)
 	})
 
 	return tags, nil
@@ -173,24 +174,27 @@ func (r *Repository) CreateTag(_ context.Context, name, hash, message string) er
 				return domain.ErrTagAlreadyExists
 			}
 		}
-		return err
+		return fmt.Errorf("creating annotated tag %s: %w", name, err)
 	}
 
 	// Create lightweight tag — check for an existing ref first because
 	// Storer.SetReference silently overwrites rather than erroring on duplicates.
-	existing, _ := r.repo.Storer.Reference(plumbing.NewTagReferenceName(name))
+	existing, refErr := r.repo.Storer.Reference(plumbing.NewTagReferenceName(name))
+	if refErr != nil && !errors.Is(refErr, plumbing.ErrReferenceNotFound) {
+		return fmt.Errorf("checking existing tag %s: %w", name, refErr)
+	}
 	if existing != nil {
 		if existing.Hash().String() == hash {
 			return domain.ErrTagAlreadyExists
 		}
-		return git.ErrTagExists
+		return fmt.Errorf("tag %s already exists at a different commit: %w", name, git.ErrTagExists)
 	}
 	ref := plumbing.NewReferenceFromStrings("refs/tags/"+name, hash)
 	return r.repo.Storer.SetReference(ref)
 }
 
 // PushTag pushes a tag to the remote.
-func (r *Repository) PushTag(_ context.Context, name string) error {
+func (r *Repository) PushTag(ctx context.Context, name string) error {
 	refSpec := config.RefSpec(fmt.Sprintf("refs/tags/%s:refs/tags/%s", name, name))
 
 	auth := resolveAuth()
@@ -268,7 +272,7 @@ func (r *Repository) Commit(_ context.Context, message string) error {
 }
 
 // Push pushes the current branch to origin.
-func (r *Repository) Push(_ context.Context) error {
+func (r *Repository) Push(ctx context.Context) error {
 	auth := resolveAuth()
 	err := r.repo.Push(&git.PushOptions{
 		RemoteName: "origin",

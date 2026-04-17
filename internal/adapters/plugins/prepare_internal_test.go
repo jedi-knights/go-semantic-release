@@ -138,6 +138,7 @@ func TestPrependChangelog(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDefaultCommandRunner_Success(t *testing.T) {
+	t.Parallel()
 	err := defaultCommandRunner(context.Background(), "exit 0", domain.NewVersion(1, 0, 0))
 	if err != nil {
 		t.Errorf("expected nil for successful command, got %v", err)
@@ -145,6 +146,7 @@ func TestDefaultCommandRunner_Success(t *testing.T) {
 }
 
 func TestDefaultCommandRunner_Failure(t *testing.T) {
+	t.Parallel()
 	err := defaultCommandRunner(context.Background(), "exit 1", domain.NewVersion(1, 0, 0))
 	if err == nil {
 		t.Fatal("expected error for failing command, got nil")
@@ -155,8 +157,9 @@ func TestDefaultCommandRunner_Failure(t *testing.T) {
 }
 
 func TestDefaultCommandRunner_SetsVersionEnv(t *testing.T) {
+	t.Parallel()
 	tmpFile := filepath.Join(t.TempDir(), "ver.txt")
-	cmd := fmt.Sprintf("echo $NEXT_RELEASE_VERSION > %s", tmpFile)
+	cmd := fmt.Sprintf(`echo $NEXT_RELEASE_VERSION > %q`, tmpFile)
 	if err := defaultCommandRunner(context.Background(), cmd, domain.NewVersion(2, 3, 4)); err != nil {
 		t.Fatalf("defaultCommandRunner: %v", err)
 	}

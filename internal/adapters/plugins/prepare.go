@@ -147,6 +147,9 @@ func (p *PreparePlugin) runCommand(ctx context.Context, version domain.Version) 
 }
 
 // defaultCommandRunner executes a shell command via sh -c.
+// The cmd string is executed verbatim as a shell command. Operators are
+// responsible for ensuring that extended remote configurations are trusted,
+// as a compromised remote extends URL could inject arbitrary shell commands.
 func defaultCommandRunner(ctx context.Context, cmd string, version domain.Version) error {
 	c := exec.CommandContext(ctx, "sh", "-c", cmd)
 	c.Env = append(os.Environ(), "NEXT_RELEASE_VERSION="+version.String())

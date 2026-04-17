@@ -352,9 +352,7 @@ func (c *Container) buildPlugins() ([]ports.Plugin, error) {
 	if len(c.config.Plugins) > 0 {
 		external, err := plugins.LoadExternalPlugins(c.config.Plugins)
 		if err != nil {
-			// Log at Error and surface to the caller so the pipeline can be gated.
 			// Return (nil, err) so callers cannot accidentally use a partial list.
-			logger.Error("failed to load external plugins", "error", err)
 			return nil, err
 		}
 		ps = append(ps, external...)

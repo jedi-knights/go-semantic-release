@@ -100,5 +100,8 @@ func WriteDefaultConfig(path string) error {
 	v.Set("dependency_propagation", false)
 	v.Set("github.create_release", true)
 
-	return v.WriteConfigAs(path)
+	if err := v.WriteConfigAs(path); err != nil {
+		return fmt.Errorf("writing default config to %s: %w", path, err)
+	}
+	return nil
 }
