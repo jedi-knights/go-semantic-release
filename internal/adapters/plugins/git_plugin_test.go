@@ -3,6 +3,7 @@ package plugins_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"go.uber.org/mock/gomock"
@@ -250,6 +251,54 @@ func TestGitPlugin_Publish_TagCreationError(t *testing.T) {
 	_, err := p.Publish(context.Background(), rc)
 	if err == nil {
 		t.Error("Publish() should return error when tag creation fails")
+	}
+}
+
+func TestGitPlugin_Publish_CommitMessageIncludesNotes(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockGit := mocks.NewMockGitRepository(ctrl)
+	mockTag := mocks.NewMockTagService(ctrl)
+
+	version := domain.NewVersion(1, 0, 0)
+	mockTag.EXPECT().FormatTag("svc", version).Return("svc/v1.0.0", nil)
+	mockGit.EXPECT().Stage(gomock.Any(), gomock.Any()).Return(nil)
+	mockGit.EXPECT().Commit(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, msg string) error {
+			if !strings.Contains(msg, "chore(release): 1.0.0") {
+				t.Errorf("commit message missing version, got: %q", msg)
+			}
+			if !strings.Contains(msg, "## 1.0.0") {
+				t.Errorf("commit message missing release notes, got: %q", msg)
+			}
+			return nil
+		},
+	)
+	mockGit.EXPECT().Push(gomock.Any()).Return(nil)
+	mockGit.EXPECT().HeadHash(gomock.Any()).Return("abc", nil)
+	mockGit.EXPECT().CreateTag(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	mockGit.EXPECT().PushTag(gomock.Any(), gomock.Any()).Return(nil)
+
+	p := plugins.NewGitPlugin(
+		mockGit, mockTag,
+		mocks.NewMockFileSystem(ctrl),
+		noopLogger{},
+		domain.DefaultGitIdentity(),
+		domain.GitConfig{
+			Assets:  []string{"CHANGELOG.md"},
+			Message: "chore(release): {{.Version}} [skip ci]\n\n{{.Notes}}",
+		},
+	)
+
+	rc := &domain.ReleaseContext{
+		Notes: "## 1.0.0\n\n- feat: something",
+		CurrentProject: &domain.ProjectReleasePlan{
+			Project:     domain.Project{Name: "svc"},
+			NextVersion: version,
+		},
+	}
+
+	if _, err := p.Publish(context.Background(), rc); err != nil {
+		t.Fatalf("Publish() error = %v", err)
 	}
 }
 
