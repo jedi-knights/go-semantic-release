@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.10.0 (2026-04-17)
+
+### Features
+
+- **release:** add prepare.command, git.assets, and prepare.version_files support (db57d1b)
+
+### Bug Fixes
+
+- **review:** address code review findings (fa4bcba)
+- **git-plugin:** expose {{.Notes}} in commit message template (d881187)
+
 ## 0.9.4 (2026-04-12)
 
 ### Bug Fixes
