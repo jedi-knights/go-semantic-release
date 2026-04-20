@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.1 (2026-04-20)
+
+### Bug Fixes
+
+- **ci:** upgrade goreleaser-action from v6 to v7 (2d0b46d)
+
 ## 0.10.0 (2026-04-17)
 
 ### Features
