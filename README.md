@@ -362,6 +362,44 @@ github:
   # token: set via GH_TOKEN, GITHUB_TOKEN, or SEMANTIC_RELEASE_GITHUB_TOKEN
 ```
 
+### GitHub Token Scopes
+
+The token must have sufficient permissions to cover every operation the tool performs: creating and updating releases, uploading release assets, pushing git tags and commits, commenting on pull requests and issues, applying labels, and managing failure issues.
+
+#### Classic Personal Access Token (PAT)
+
+| Scope | When required |
+|-------|--------------|
+| `repo` | **Always** — grants full repository access for private repos. Covers pushes, releases, issues, PRs, and labels. |
+| `public_repo` | Alternative to `repo` for **public repositories only**. Grants the same operations but is scoped to public repos. |
+| `write:discussion` | Only when `discussion_category_name` is set in config. Required to link a GitHub Discussion to the release. |
+
+> **Minimum:** `repo` (private repos) or `public_repo` (public repos only).
+
+#### Fine-Grained Personal Access Token
+
+Select these repository permissions when creating a fine-grained PAT:
+
+| Permission | Level | Why |
+|------------|-------|-----|
+| Contents | Read and write | Push tags and commits; create/upload releases |
+| Issues | Read and write | Create failure issues, add comments and labels |
+| Metadata | Read-only | Mandatory for all fine-grained PATs |
+| Pull requests | Read and write | Comment on PRs and add released labels |
+| Discussions | Read and write | Only when `discussion_category_name` is configured |
+
+#### GitHub Actions `GITHUB_TOKEN`
+
+When using the built-in `GITHUB_TOKEN` in a workflow, grant the following permissions in the job that runs the release:
+
+```yaml
+permissions:
+  contents: write       # push tags and commits, create releases, upload assets
+  issues: write         # create failure issues, add comments and labels
+  pull-requests: write  # comment on PRs and apply released labels
+  # discussions: write  # uncomment only if discussion_category_name is configured
+```
+
 ## Release Candidate Workflows
 
 go-semantic-release supports prerelease branching strategies for teams that want to validate builds before publishing a stable release. Release candidates are driven entirely by conventional commits — the tool determines the base version and increments the RC counter automatically based on what you push. No manual version management is required.
