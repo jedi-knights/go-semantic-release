@@ -4,7 +4,7 @@
 [![Release](https://github.com/jedi-knights/go-semantic-release/actions/workflows/release.yml/badge.svg)](https://github.com/jedi-knights/go-semantic-release/actions/workflows/release.yml)
 [![GoReleaser](https://github.com/jedi-knights/go-semantic-release/actions/workflows/goreleaser.yml/badge.svg)](https://github.com/jedi-knights/go-semantic-release/actions/workflows/goreleaser.yml)
 [![Badge](https://github.com/jedi-knights/go-semantic-release/actions/workflows/badge.yaml/badge.svg)](https://github.com/jedi-knights/go-semantic-release/actions/workflows/badge.yaml)
-[![Coverage](https://img.shields.io/badge/Coverage-86.9%25-green)](https://jedi-knights.github.io/go-semantic-release/?v=9)
+[![Coverage](https://img.shields.io/badge/Coverage-86.9%25-green)](https://jedi-knights.github.io/go-semantic-release/?v=10)
 
 A production-grade semantic release utility written in native Go. Analyzes conventional commits, determines the next semantic version, generates changelogs, creates tags, and publishes GitHub releases.
 
