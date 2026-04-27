@@ -766,6 +766,139 @@ func TestPreparePlugin_VersionFilesWriteError_TOML(t *testing.T) {
 	}
 }
 
+// recordingLogger captures Info calls so dry-run tests can assert on the message
+// stream without depending on the order of arguments in slog.LogValuer formatting.
+type recordingLogger struct {
+	infos []recordedLog
+}
+
+type recordedLog struct {
+	msg  string
+	args []any
+}
+
+func (r *recordingLogger) Debug(string, ...any) {}
+func (r *recordingLogger) Info(msg string, args ...any) {
+	r.infos = append(r.infos, recordedLog{msg: msg, args: args})
+}
+func (r *recordingLogger) Warn(string, ...any)  {}
+func (r *recordingLogger) Error(string, ...any) {}
+
+func (r *recordingLogger) hasMessage(substr string) bool {
+	for _, rec := range r.infos {
+		if strings.Contains(rec.msg, substr) {
+			return true
+		}
+	}
+	return false
+}
+
+func TestPreparePlugin_DryRunSkipsAllMutationsAndCommand(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	mockFS := mocks.NewMockFileSystem(ctrl)
+	// gomock will fail the test if any FileSystem method is called.
+
+	commandCalled := false
+	logger := &recordingLogger{}
+
+	plugin := plugins.NewPreparePlugin(mockFS, logger, domain.PrepareConfig{
+		VersionFile:   "VERSION",
+		ChangelogFile: "CHANGELOG.md",
+		Command:       "uv lock",
+		VersionFiles: []string{
+			"VERSION2",
+			"pyproject.toml:project.version",
+		},
+	}, plugins.WithCommandRunner(func(_ context.Context, _ string, _ domain.Version) error {
+		commandCalled = true
+		return nil
+	}))
+
+	rc := &domain.ReleaseContext{
+		RepositoryRoot: "/repo",
+		DryRun:         true,
+		Notes:          "## 2.0.0\n\n- something",
+		CurrentProject: &domain.ProjectReleasePlan{
+			NextVersion: domain.NewVersion(2, 0, 0),
+		},
+	}
+
+	if err := plugin.Prepare(context.Background(), rc); err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	if commandCalled {
+		t.Error("prepare command must not be executed during dry run")
+	}
+
+	for _, want := range []string{
+		"would update version file",
+		"would update TOML version key",
+		"would run prepare command",
+		"would update changelog",
+	} {
+		if !logger.hasMessage(want) {
+			t.Errorf("expected dry-run log %q, got %+v", want, logger.infos)
+		}
+	}
+}
+
+func TestPreparePlugin_DryRunSkipsChangelogWhenNotesEmpty(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	mockFS := mocks.NewMockFileSystem(ctrl)
+	// No filesystem calls expected.
+
+	logger := &recordingLogger{}
+
+	plugin := plugins.NewPreparePlugin(mockFS, logger, domain.PrepareConfig{
+		ChangelogFile: "CHANGELOG.md",
+	})
+
+	rc := &domain.ReleaseContext{
+		RepositoryRoot: "/repo",
+		DryRun:         true,
+		Notes:          "",
+		CurrentProject: &domain.ProjectReleasePlan{
+			NextVersion: domain.NewVersion(1, 0, 0),
+		},
+	}
+
+	if err := plugin.Prepare(context.Background(), rc); err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	if logger.hasMessage("would update changelog") {
+		t.Error("dry-run must not log a changelog update when Notes is empty")
+	}
+}
+
+func TestPreparePlugin_DryRunStillEnforcesPathTraversal(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	mockFS := mocks.NewMockFileSystem(ctrl)
+
+	plugin := plugins.NewPreparePlugin(mockFS, noopLogger{}, domain.PrepareConfig{
+		ChangelogFile: "../../etc/passwd",
+	})
+
+	rc := &domain.ReleaseContext{
+		RepositoryRoot: "/repo",
+		DryRun:         true,
+		Notes:          "## 1.0.0",
+		CurrentProject: &domain.ProjectReleasePlan{
+			NextVersion: domain.NewVersion(1, 0, 0),
+		},
+	}
+
+	err := plugin.Prepare(context.Background(), rc)
+	if err == nil {
+		t.Fatal("expected traversal guard error during dry-run, got nil")
+	}
+	if !strings.Contains(err.Error(), "escapes repository root") {
+		t.Errorf("expected traversal guard error, got: %v", err)
+	}
+}
+
 func TestPreparePlugin_PlainVersionFilesWriteError(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)

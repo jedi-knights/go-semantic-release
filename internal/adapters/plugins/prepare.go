@@ -69,6 +69,13 @@ func (p *PreparePlugin) Prepare(ctx context.Context, rc *domain.ReleaseContext) 
 		return nil
 	}
 
+	// Dry-run skips every mutation in this plugin and logs what would have happened
+	// instead. The same path/traversal validations still run so dry-run reports the
+	// same configuration errors a real run would surface.
+	if rc.DryRun {
+		return p.previewPrepare(rc)
+	}
+
 	version := rc.CurrentProject.NextVersion
 
 	if err := p.updateVersionFile(ctx, version, rc.RepositoryRoot); err != nil {
@@ -84,6 +91,65 @@ func (p *PreparePlugin) Prepare(ctx context.Context, rc *domain.ReleaseContext) 
 	}
 
 	return p.updateChangelog(ctx, rc)
+}
+
+// previewPrepare logs the file mutations and command execution that a real prepare
+// step would perform, without touching the filesystem or running any command. It
+// preserves the same path-traversal and absolute-root validations as the real path
+// so misconfiguration is reported consistently in dry-run.
+func (p *PreparePlugin) previewPrepare(rc *domain.ReleaseContext) error {
+	version := rc.CurrentProject.NextVersion
+
+	if p.versionFile != "" {
+		path := filepath.Join(rc.RepositoryRoot, p.versionFile)
+		p.logger.Info("dry run: would update version file", "path", path, "version", version)
+	}
+
+	for _, entry := range p.versionFiles {
+		ve := domain.ParseVersionFileEntry(entry)
+		path := filepath.Join(rc.RepositoryRoot, ve.Path)
+		if ve.KeyPath == "" {
+			p.logger.Info("dry run: would update version file", "path", path, "version", version)
+		} else {
+			p.logger.Info("dry run: would update TOML version key", "path", path, "key", ve.KeyPath, "version", version)
+		}
+	}
+
+	if p.command != "" {
+		p.logger.Info("dry run: would run prepare command", "command", p.command)
+	}
+
+	path, err := p.validatedChangelogPath(rc)
+	if err != nil || path == "" {
+		return err
+	}
+	if rc.Notes == "" {
+		return nil
+	}
+	p.logger.Info("dry run: would update changelog", "path", path)
+	return nil
+}
+
+// validatedChangelogPath resolves and validates the changelog path. Returns "" when
+// no changelog is configured. Returns an error when RepositoryRoot is not absolute
+// or when the resolved path escapes the repository root.
+func (p *PreparePlugin) validatedChangelogPath(rc *domain.ReleaseContext) (string, error) {
+	if !filepath.IsAbs(rc.RepositoryRoot) {
+		return "", fmt.Errorf("RepositoryRoot must be an absolute path, got: %q", rc.RepositoryRoot)
+	}
+	raw := p.changelogPath(rc)
+	if raw == "" {
+		return "", nil
+	}
+	path := filepath.Clean(raw)
+	if path == "." {
+		return "", nil
+	}
+	root := filepath.Clean(rc.RepositoryRoot)
+	if !strings.HasPrefix(path, root+string(filepath.Separator)) {
+		return "", fmt.Errorf("changelog_file path escapes repository root: %s", path)
+	}
+	return path, nil
 }
 
 // updateVersionFile writes the version string to the configured VERSION file.
@@ -179,31 +245,9 @@ func (p *PreparePlugin) changelogPath(rc *domain.ReleaseContext) string {
 // updateChangelog prepends the generated release notes into the changelog file.
 // ctx is accepted for forward-compatibility; ports.FileSystem does not yet support cancellation.
 func (p *PreparePlugin) updateChangelog(_ context.Context, rc *domain.ReleaseContext) error {
-	// Require an absolute RepositoryRoot so the traversal guard below is reliable.
-	// A relative root (e.g. ".") would make filepath.Clean produce a relative prefix,
-	// causing valid absolute changelog paths to fail the HasPrefix check.
-	if !filepath.IsAbs(rc.RepositoryRoot) {
-		return fmt.Errorf("RepositoryRoot must be an absolute path, got: %q", rc.RepositoryRoot)
-	}
-
-	// Resolve the raw path first; empty means no changelog is configured.
-	raw := p.changelogPath(rc)
-	if raw == "" {
-		return nil
-	}
-	// Explicitly clean the path so the traversal guard holds regardless of how
-	// changelogPath constructs the string in the future.
-	path := filepath.Clean(raw)
-	if path == "." {
-		return nil
-	}
-
-	// Guard against user-supplied changelog_file values that escape the repository root
-	// via path traversal (e.g. "../../etc/passwd"). The separator suffix is required so
-	// that a root of "/repo" does not accidentally allow "/repo-sibling/evil".
-	root := filepath.Clean(rc.RepositoryRoot)
-	if !strings.HasPrefix(path, root+string(filepath.Separator)) {
-		return fmt.Errorf("changelog_file path escapes repository root: %s", path)
+	path, err := p.validatedChangelogPath(rc)
+	if err != nil || path == "" {
+		return err
 	}
 
 	newEntry := rc.Notes
