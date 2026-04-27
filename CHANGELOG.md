@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.2 (2026-04-27)
+
+### Bug Fixes
+
+- **prepare:** skip file mutations during dry-run (14bb707)
+
 ## 0.10.1 (2026-04-20)
 
 ### Bug Fixes
