@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.0 (2026-07-19)
+
+### Features
+
+- **cargo:** add Rust project support to discovery and prepare (#28) (94f8b2f)
+
 ## 0.10.2 (2026-04-27)
 
 ### Bug Fixes
