@@ -27,6 +27,12 @@ const (
 	// ProjectTypeCmdLibrary indicates the project is a shared library package (e.g. pkg/<name>)
 	// imported by one or more cmd services in a single-module monorepo.
 	ProjectTypeCmdLibrary ProjectType = "cmd-library"
+	// ProjectTypeCargoCrate indicates a single-crate Rust project discovered via a
+	// root Cargo.toml with a [package] section.
+	ProjectTypeCargoCrate ProjectType = "cargo-crate"
+	// ProjectTypeCargoWorkspace indicates a Rust Cargo workspace discovered via a
+	// root Cargo.toml with a [workspace] section.
+	ProjectTypeCargoWorkspace ProjectType = "cargo-workspace"
 )
 
 // String returns the string representation of the release mode.

@@ -95,6 +95,18 @@ type PrepareConfig struct {
 	AdditionalFiles []string `mapstructure:"additional_files"`
 	Command         string   `mapstructure:"command"`
 	VersionFiles    []string `mapstructure:"version_files"`
+	// Cargo controls Rust/Cargo awareness in the prepare step. When enabled (the
+	// default when unset) and a root Cargo.toml is present, the prepare step
+	// updates the Cargo.toml version key and each local crate's version in
+	// Cargo.lock. Set to false to disable.
+	Cargo *bool `mapstructure:"cargo"`
+}
+
+// CargoEnabled reports whether Rust/Cargo awareness is enabled. It defaults to
+// true when Cargo is unset so that Rust repositories work with the same minimal
+// configuration as any other language.
+func (p PrepareConfig) CargoEnabled() bool {
+	return p.Cargo == nil || *p.Cargo
 }
 
 // GitConfig holds settings for git operations performed during the release workflow.

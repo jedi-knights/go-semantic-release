@@ -35,6 +35,7 @@ Supports monorepos with independent project versioning, including Go workspaces 
   - `cmd/` layout single-module monorepos (service + shared library detection)
   - Config-defined projects with path mappings
 - **Branch policies** — stable releases on main, prereleases on beta/alpha/next
+- **Rust/Cargo support** — auto-detects crates and workspaces; bumps `Cargo.toml` and `Cargo.lock` with no Rust toolchain required
 - **Changelog generation** — Markdown release notes grouped by commit type
 - **GitHub Releases** — creates releases via the GitHub API
 - **Dry-run mode** — preview releases without any mutations
@@ -298,6 +299,55 @@ When configured, the prepare step runs before the release is published:
    ```
 
    If the command exits with a non-zero status, the release is aborted.
+
+### Rust / Cargo projects
+
+Rust repositories release through the exact same flow as Go and Python projects — analyze
+conventional commits, bump files, commit `[skip ci]`, push a `v*` tag. When a `Cargo.toml`
+is present at the repository root, semantic-release detects the project and, as part of the
+prepare step, updates the Rust version files automatically:
+
+- **`Cargo.toml`** — the shared version key is bumped in place, preserving formatting and
+  comments. A single crate updates `[package] version`; a workspace updates
+  `[workspace.package] version`.
+- **`Cargo.lock`** — every local crate's `[[package]] version` entry is updated to match.
+  Third-party dependencies are left untouched. This is done natively, so **no Rust toolchain
+  is required in the release job** — the flow stays identical to Go and Python.
+
+`semantic-release detect-projects` reports the repository as `cargo-crate` or `cargo-workspace`.
+
+Minimal configuration — a workspace (`vcl-toolkit`, `nasm-lint`) or single crate (`plug-audit`)
+needs only the same prepare/assets block as any other language:
+
+```yaml
+release_mode: repo
+tag_format: "v{{.Version}}"
+
+branches:
+  - name: main
+    is_default: true
+
+prepare:
+  changelog_file: CHANGELOG.md
+  version_file: VERSION
+
+git:
+  assets:
+    - CHANGELOG.md
+    - VERSION
+    - Cargo.toml
+    - Cargo.lock
+  message: "chore(release): {{.Version}} [skip ci]\n\n{{.Notes}}"
+```
+
+List `Cargo.toml` and `Cargo.lock` under `git.assets` so the automatic version bumps are
+committed alongside the tag. Cargo awareness is on by default; set `prepare.cargo: false` to
+disable it, or add `version_files: [Cargo.toml:workspace.package.version]` to pin the key
+explicitly (this takes precedence over auto-detection, and `Cargo.lock` is still refreshed).
+
+> **Out of scope by design:** semantic-release does not run `cargo-semver-checks` (commit
+> messages remain the source of truth for breaking changes) and does not publish to crates.io.
+> To publish, add `cargo publish` via the prepare `command` hook.
 
 ### Git assets (pre-tag commit)
 
@@ -884,6 +934,7 @@ internal/di/             # DI container wiring
 - [x] Commit message linting
 - [x] Interactive mode for release confirmation
 - [x] `cmd/` layout discovery for single-module Go monorepos (`discover_cmd: true`)
+- [x] Rust/Cargo support — detect crates and workspaces, bump `Cargo.toml` and `Cargo.lock` (no toolchain required)
 
 ## References
 

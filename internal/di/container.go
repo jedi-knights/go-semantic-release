@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 
 	"github.com/jedi-knights/go-semantic-release/internal/adapters/bitbucket"
+	"github.com/jedi-knights/go-semantic-release/internal/adapters/cargo"
 	"github.com/jedi-knights/go-semantic-release/internal/adapters/changelog"
 	adapterfs "github.com/jedi-knights/go-semantic-release/internal/adapters/fs"
 	adaptergit "github.com/jedi-knights/go-semantic-release/internal/adapters/git"
@@ -218,6 +219,11 @@ func (c *Container) buildDiscoverer() ports.ProjectDiscoverer {
 	if c.config.DiscoverCmd {
 		discoverers = append(discoverers, adaptergit.NewCmdDiscoverer(fs))
 	}
+	// RustDiscoverer is appended last: CompositeDiscoverer is first-wins, so a
+	// pure-Rust repo (which yields nothing from the Go discoverers) falls through
+	// to it, while a mixed Go+Rust repo keeps its existing Go-based discovery.
+	// It returns nothing when there is no root Cargo.toml, so it is harmless here.
+	discoverers = append(discoverers, cargo.NewRustDiscoverer(fs))
 
 	return adaptergit.NewCompositeDiscoverer(discoverers...)
 }
@@ -285,6 +291,9 @@ func (c *Container) buildPlugins() ([]ports.Plugin, error) {
 			c.FileSystem(),
 			logger,
 			c.config.Prepare,
+			// Cargo awareness is on by default (see PrepareConfig.CargoEnabled): a
+			// Rust repo works with the same minimal prepare config as any other.
+			plugins.WithCargo(c.config.Prepare.CargoEnabled()),
 		))
 	}
 

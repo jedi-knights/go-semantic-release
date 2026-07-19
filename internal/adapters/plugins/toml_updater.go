@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+
+	"github.com/jedi-knights/go-semantic-release/internal/adapters/tomledit"
 )
 
 // updateTOMLKey updates a single key under a TOML section in-place, preserving
@@ -105,22 +107,8 @@ func parseSectionHeader(line string) (string, bool) {
 	return trimmed[:end+1], true
 }
 
-// replaceKeyValue checks whether line assigns the given key a quoted string
-// value and replaces the value with newValue, preserving indentation and any
-// trailing content (e.g. inline comments).
+// replaceKeyValue delegates to tomledit.ReplaceKeyValue, the shared surgical
+// line editor used by both this updater and the Cargo.lock updater.
 func replaceKeyValue(line, key, newValue string) (string, bool) {
-	trimmed := strings.TrimLeft(line, " \t")
-	indent := line[:len(line)-len(trimmed)]
-
-	prefix := key + ` = "`
-	if !strings.HasPrefix(trimmed, prefix) {
-		return line, false
-	}
-	rest := trimmed[len(prefix):]
-	closeQuote := strings.Index(rest, `"`)
-	if closeQuote < 0 {
-		return line, false
-	}
-	trailer := rest[closeQuote+1:]
-	return indent + prefix + newValue + `"` + trailer, true
+	return tomledit.ReplaceKeyValue(line, key, newValue)
 }
