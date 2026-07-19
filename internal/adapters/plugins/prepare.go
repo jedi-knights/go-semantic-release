@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/jedi-knights/go-semantic-release/internal/adapters/cargo"
 	"github.com/jedi-knights/go-semantic-release/internal/domain"
 	"github.com/jedi-knights/go-semantic-release/internal/ports"
 )
@@ -33,6 +34,16 @@ func WithCommandRunner(fn commandRunnerFunc) PrepareOption {
 	}
 }
 
+// WithCargo enables or disables Rust/Cargo awareness. When enabled and a root
+// Cargo.toml is present, the prepare step updates the Cargo.toml version key and
+// each local crate's version in Cargo.lock. It is disabled by default at
+// construction; the DI container enables it based on config (default on).
+func WithCargo(enabled bool) PrepareOption {
+	return func(p *PreparePlugin) {
+		p.cargoEnabled = enabled
+	}
+}
+
 // PreparePlugin updates files (CHANGELOG.md, VERSION, version_files) before the release is published,
 // then optionally runs a prepare command.
 type PreparePlugin struct {
@@ -42,6 +53,7 @@ type PreparePlugin struct {
 	versionFile   string   // path to VERSION file, empty to skip
 	command       string   // shell command to run after file updates, empty to skip
 	versionFiles  []string // additional version files (format: "path" or "path:key.path")
+	cargoEnabled  bool     // update Cargo.toml/Cargo.lock when a root Cargo.toml is present
 	runCmd        commandRunnerFunc
 }
 
@@ -86,6 +98,10 @@ func (p *PreparePlugin) Prepare(ctx context.Context, rc *domain.ReleaseContext) 
 		return err
 	}
 
+	if err := p.updateCargo(ctx, version, rc.RepositoryRoot); err != nil {
+		return err
+	}
+
 	if err := p.runCommand(ctx, version); err != nil {
 		return err
 	}
@@ -114,6 +130,8 @@ func (p *PreparePlugin) previewPrepare(rc *domain.ReleaseContext) error {
 			p.logger.Info("dry run: would update TOML version key", "path", path, "key", ve.KeyPath, "version", version)
 		}
 	}
+
+	p.previewCargo(version, rc.RepositoryRoot)
 
 	if p.command != "" {
 		p.logger.Info("dry run: would run prepare command", "command", p.command)
@@ -198,6 +216,112 @@ func (p *PreparePlugin) updateVersionFiles(_ context.Context, version domain.Ver
 		p.logger.Info("updated TOML version key", "path", path, "key", ve.KeyPath, "version", version)
 	}
 	return nil
+}
+
+// previewCargo logs the Cargo file mutations a real prepare would perform,
+// without mutating anything. Detection is read-only, so it is safe in dry-run.
+func (p *PreparePlugin) previewCargo(version domain.Version, repoRoot string) {
+	if !p.cargoEnabled {
+		return
+	}
+	info, err := cargo.Detect(p.fs, repoRoot)
+	if err != nil || info == nil {
+		return
+	}
+	if info.VersionKeyPath != "" && !p.versionFilesTarget("Cargo.toml") {
+		p.logger.Info("dry run: would update Cargo.toml version", "key", info.VersionKeyPath, "version", version)
+	}
+	lockPath := filepath.Join(repoRoot, "Cargo.lock")
+	if len(info.CrateNames) > 0 && p.fs.Exists(lockPath) {
+		p.logger.Info("dry run: would update Cargo.lock", "crates", len(info.CrateNames), "version", version)
+	}
+}
+
+// updateCargo updates Rust version files when the repository is a Cargo project
+// and cargo awareness is enabled: it bumps the shared version key in Cargo.toml
+// (unless the user already targets Cargo.toml via version_files) and rewrites
+// each local crate's version in Cargo.lock. It is a no-op for non-Rust repos.
+//
+// Doing the Cargo.lock update natively means the release job needs no Rust
+// toolchain — the same flow as Go/Python releases.
+func (p *PreparePlugin) updateCargo(_ context.Context, version domain.Version, repoRoot string) error {
+	if !p.cargoEnabled {
+		return nil
+	}
+	info, err := cargo.Detect(p.fs, repoRoot)
+	if err != nil {
+		return fmt.Errorf("detecting cargo project: %w", err)
+	}
+	if info == nil {
+		return nil
+	}
+
+	if err := p.updateCargoManifest(info, version, repoRoot); err != nil {
+		return err
+	}
+	return p.updateCargoLock(info, version, repoRoot)
+}
+
+// updateCargoManifest bumps the shared version key in Cargo.toml. It is skipped
+// when the user already lists Cargo.toml in version_files (that path handled it)
+// or when the manifest has no single shared version key.
+func (p *PreparePlugin) updateCargoManifest(info *cargo.Info, version domain.Version, repoRoot string) error {
+	if info.VersionKeyPath == "" || p.versionFilesTarget("Cargo.toml") {
+		return nil
+	}
+	path := filepath.Join(repoRoot, "Cargo.toml")
+	content, err := p.fs.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("reading %s: %w", path, err)
+	}
+	updated, err := updateTOMLKey(content, info.VersionKeyPath, version.String())
+	if err != nil {
+		return fmt.Errorf("updating version in %s: %w", path, err)
+	}
+	if err := p.fs.WriteFile(path, updated, fs.FileMode(0o644)); err != nil {
+		return fmt.Errorf("writing %s: %w", path, err)
+	}
+	p.logger.Info("updated Cargo.toml version", "path", path, "key", info.VersionKeyPath, "version", version)
+	return nil
+}
+
+// updateCargoLock rewrites the version of each local crate in Cargo.lock. It is
+// skipped when there is no lock file or no local crates to update.
+func (p *PreparePlugin) updateCargoLock(info *cargo.Info, version domain.Version, repoRoot string) error {
+	lockPath := filepath.Join(repoRoot, "Cargo.lock")
+	if len(info.CrateNames) == 0 || !p.fs.Exists(lockPath) {
+		return nil
+	}
+	content, err := p.fs.ReadFile(lockPath)
+	if err != nil {
+		return fmt.Errorf("reading %s: %w", lockPath, err)
+	}
+	crateVersions := make(map[string]string, len(info.CrateNames))
+	for _, name := range info.CrateNames {
+		crateVersions[name] = version.String()
+	}
+	updated, err := cargo.UpdateLockVersions(content, crateVersions)
+	if err != nil {
+		return fmt.Errorf("updating %s: %w", lockPath, err)
+	}
+	if err := p.fs.WriteFile(lockPath, updated, fs.FileMode(0o644)); err != nil {
+		return fmt.Errorf("writing %s: %w", lockPath, err)
+	}
+	p.logger.Info("updated Cargo.lock crate versions", "path", lockPath, "crates", len(info.CrateNames), "version", version)
+	return nil
+}
+
+// versionFilesTarget reports whether any version_files entry targets a file with
+// the given base name (e.g. "Cargo.toml"), so cargo auto-update can defer to an
+// explicit user configuration.
+func (p *PreparePlugin) versionFilesTarget(name string) bool {
+	for _, entry := range p.versionFiles {
+		ve := domain.ParseVersionFileEntry(entry)
+		if filepath.Base(ve.Path) == name {
+			return true
+		}
+	}
+	return false
 }
 
 // runCommand executes the configured prepare command, exposing NEXT_RELEASE_VERSION as an env var.
