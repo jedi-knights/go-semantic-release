@@ -6,6 +6,10 @@ on:
       # Match only full semver tags (e.g. v1.2.3). Floating major-version tags
       # like v0 or v1 also match 'v*' and would trigger a duplicate release run.
       - 'v*.*.*'
+  # Manual re-run for a tag whose push-triggered run never fired (e.g. the tag
+  # was pushed with a token/PAT lacking permission to trigger workflows).
+  # Dispatch with the tag as the ref: `gh workflow run goreleaser.yml --ref vX.Y.Z`.
+  workflow_dispatch: {}
 
 permissions:
   contents: write
