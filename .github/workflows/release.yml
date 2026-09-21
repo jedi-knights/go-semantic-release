@@ -88,3 +88,18 @@ jobs:
           MAJOR="v${VERSION%%.*}"
           git tag -f "$MAJOR" "v${VERSION}"
           git push origin "$MAJOR" --force
+
+      # Build and publish binaries in this same job/run instead of relying on
+      # goreleaser.yml's separate `push: tags:` trigger to fire it — that
+      # cross-workflow trigger has proven unreliable (a v0.11.1 tag pushed
+      # with this same GH_TOKEN never fired it, with no error or signal).
+      # Depending on GitHub's job graph within one workflow run instead of a
+      # webhook-delivered push event can't silently no-op the same way.
+      - uses: goreleaser/goreleaser-action@v7
+        if: steps.plan.outputs.has_release == 'true'
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
