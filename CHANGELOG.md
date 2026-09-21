@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.1 (2026-09-21)
+
+### Bug Fixes
+
+- **release:** stage, commit, and push release assets before tagging (#30) (4d7cd43)
+
 ## 0.11.0 (2026-07-19)
 
 ### Features
