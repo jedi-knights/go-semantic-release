@@ -1,10 +1,8 @@
 package plugins
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"text/template"
 
 	"github.com/jedi-knights/go-semantic-release/internal/domain"
 	"github.com/jedi-knights/go-semantic-release/internal/ports"
@@ -72,7 +70,7 @@ func (p *GitPlugin) Publish(ctx context.Context, rc *domain.ReleaseContext) (*do
 		if err = p.git.Stage(ctx, p.gitConfig.Assets); err != nil {
 			return nil, fmt.Errorf("staging release assets: %w", err)
 		}
-		commitMsg := renderCommitMessage(p.gitConfig.Message, tagName, rc.CurrentProject.NextVersion, rc.Notes)
+		commitMsg := domain.RenderGitCommitMessage(p.gitConfig.Message, tagName, rc.CurrentProject.NextVersion, rc.Notes)
 		if err = p.git.Commit(ctx, commitMsg); err != nil {
 			return nil, fmt.Errorf("committing release assets: %w", err)
 		}
@@ -108,31 +106,4 @@ func (p *GitPlugin) Publish(ctx context.Context, rc *domain.ReleaseContext) (*do
 		TagCreated: true,
 		Changelog:  rc.Notes,
 	}, nil
-}
-
-// renderCommitMessage renders the commit message template with release data.
-// Supports {{.Version}}, {{.Tag}}, and {{.Notes}} placeholders.
-// Falls back to "chore(release): {tagName}" on empty template or render error.
-func renderCommitMessage(tmpl, tagName string, version domain.Version, notes string) string {
-	if tmpl == "" {
-		return fmt.Sprintf("chore(release): %s", tagName)
-	}
-	data := struct {
-		Version string
-		Tag     string
-		Notes   string
-	}{
-		Version: version.String(),
-		Tag:     tagName,
-		Notes:   notes,
-	}
-	t, err := template.New("").Parse(tmpl)
-	if err != nil {
-		return fmt.Sprintf("chore(release): %s", tagName)
-	}
-	var buf bytes.Buffer
-	if err := t.Execute(&buf, data); err != nil {
-		return fmt.Sprintf("chore(release): %s", tagName)
-	}
-	return buf.String()
 }

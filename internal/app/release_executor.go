@@ -17,6 +17,7 @@ type ReleaseExecutor struct {
 	publisher  ports.ReleasePublisher
 	logger     ports.Logger
 	sections   []domain.ChangelogSectionConfig
+	gitConfig  domain.GitConfig
 }
 
 // MustNewReleaseExecutor creates a release executor.
@@ -31,6 +32,7 @@ func MustNewReleaseExecutor(
 	publisher ports.ReleasePublisher,
 	logger ports.Logger,
 	sections []domain.ChangelogSectionConfig,
+	gitConfig domain.GitConfig,
 ) *ReleaseExecutor {
 	if git == nil {
 		panic("MustNewReleaseExecutor: git must not be nil")
@@ -54,6 +56,7 @@ func MustNewReleaseExecutor(
 		publisher:  publisher,
 		logger:     logger,
 		sections:   sections,
+		gitConfig:  gitConfig,
 	}
 }
 
@@ -129,7 +132,7 @@ func (e *ReleaseExecutor) executeProject(
 	}
 
 	// Create and push tag.
-	if err := e.createAndPushTag(ctx, tagName, notes); err != nil {
+	if err := e.createAndPushTag(ctx, tagName, pp.NextVersion, notes); err != nil {
 		return result, err
 	}
 	result.TagCreated = true
@@ -155,7 +158,24 @@ func (e *ReleaseExecutor) executeProject(
 	return result, nil
 }
 
-func (e *ReleaseExecutor) createAndPushTag(ctx context.Context, tagName, message string) error {
+func (e *ReleaseExecutor) createAndPushTag(ctx context.Context, tagName string, version domain.Version, message string) error {
+	// Stage and commit release assets (CHANGELOG.md, version-bumped files, …)
+	// before tagging, so the tag points to the release commit rather than a
+	// prior state, and the prepared changes actually land in the repository
+	// instead of being written to the runner's disk and discarded.
+	if len(e.gitConfig.Assets) > 0 {
+		if err := e.git.Stage(ctx, e.gitConfig.Assets); err != nil {
+			return domain.NewReleaseError("stage-assets", err)
+		}
+		commitMsg := domain.RenderGitCommitMessage(e.gitConfig.Message, tagName, version, message)
+		if err := e.git.Commit(ctx, commitMsg); err != nil {
+			return domain.NewReleaseError("commit-assets", err)
+		}
+		if err := e.git.Push(ctx); err != nil {
+			return domain.NewReleaseError("push-branch", err)
+		}
+	}
+
 	headHash, err := e.git.HeadHash(ctx)
 	if err != nil {
 		return domain.NewReleaseError("get-head", err)

@@ -34,7 +34,7 @@ func TestReleaseExecutor_Execute_DryRun(t *testing.T) {
 
 	// In dry-run mode, no git operations or publishing should happen.
 
-	executor := app.MustNewReleaseExecutor(mockGit, mockTag, mockChangelog, mockPublisher, mockLogger, sections)
+	executor := app.MustNewReleaseExecutor(mockGit, mockTag, mockChangelog, mockPublisher, mockLogger, sections, domain.GitConfig{})
 
 	plan := &domain.ReleasePlan{
 		DryRun: true,
@@ -100,7 +100,7 @@ func TestReleaseExecutor_Execute_FullRelease(t *testing.T) {
 		PublishURL: "https://github.com/org/repo/releases/tag/api/v2.0.0",
 	}, nil)
 
-	executor := app.MustNewReleaseExecutor(mockGit, mockTag, mockChangelog, mockPublisher, mockLogger, sections)
+	executor := app.MustNewReleaseExecutor(mockGit, mockTag, mockChangelog, mockPublisher, mockLogger, sections, domain.GitConfig{})
 
 	plan := &domain.ReleasePlan{
 		DryRun: false,
@@ -135,6 +135,181 @@ func TestReleaseExecutor_Execute_FullRelease(t *testing.T) {
 	}
 }
 
+// TestReleaseExecutor_Execute_StagesCommitsAndPushesReleaseAssets covers the
+// regression this test guards against: when git.assets is configured, the
+// prepared release files (CHANGELOG.md, version-bumped manifests, …) must be
+// staged, committed, and pushed to the branch BEFORE the tag is created —
+// otherwise the tag points at a pre-existing commit and the prepared changes
+// are silently discarded on the runner instead of landing in the repository.
+func TestReleaseExecutor_Execute_StagesCommitsAndPushesReleaseAssets(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+
+	mockGit := mocks.NewMockGitRepository(ctrl)
+	mockTag := mocks.NewMockTagService(ctrl)
+	mockChangelog := mocks.NewMockChangelogGenerator(ctrl)
+	mockPublisher := mocks.NewMockReleasePublisher(ctrl)
+	mockLogger := mocks.NewMockLogger(ctrl)
+	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
+
+	sections := domain.DefaultChangelogSections()
+
+	mockChangelog.EXPECT().Generate(
+		domain.NewVersion(1, 1, 0), "", gomock.Any(), sections,
+	).Return("## 1.1.0\n\n### Features\n- add feature", nil)
+
+	mockTag.EXPECT().FormatTag("", domain.NewVersion(1, 1, 0)).Return("v1.1.0", nil)
+
+	assets := []string{"CHANGELOG.md", "package.json"}
+
+	// Stage -> Commit -> Push (branch) must happen, in order, before the tag
+	// is created at the resulting HEAD.
+	gomock.InOrder(
+		mockGit.EXPECT().Stage(gomock.Any(), assets).Return(nil),
+		mockGit.EXPECT().Commit(gomock.Any(), "chore(release): 1.1.0 [skip ci]").Return(nil),
+		mockGit.EXPECT().Push(gomock.Any()).Return(nil),
+		mockGit.EXPECT().HeadHash(gomock.Any()).Return("cafef00d", nil),
+		mockGit.EXPECT().CreateTag(gomock.Any(), "v1.1.0", "cafef00d", gomock.Any()).Return(nil),
+		mockGit.EXPECT().PushTag(gomock.Any(), "v1.1.0").Return(nil),
+	)
+
+	mockPublisher.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(
+		domain.ProjectReleaseResult{Published: true}, nil,
+	)
+
+	gitConfig := domain.GitConfig{
+		Assets:  assets,
+		Message: "chore(release): {{.Version}} [skip ci]",
+	}
+	executor := app.MustNewReleaseExecutor(mockGit, mockTag, mockChangelog, mockPublisher, mockLogger, sections, gitConfig)
+
+	plan := &domain.ReleasePlan{
+		DryRun: false,
+		Projects: []domain.ProjectReleasePlan{{
+			Project:        domain.Project{Name: "", Path: "."},
+			CurrentVersion: domain.NewVersion(1, 0, 0),
+			NextVersion:    domain.NewVersion(1, 1, 0),
+			ReleaseType:    domain.ReleaseMinor,
+			Commits:        []domain.Commit{{Type: "feat", Description: "add feature"}},
+			ShouldRelease:  true,
+		}},
+	}
+
+	result, err := executor.Execute(context.Background(), plan)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if len(result.Projects) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result.Projects))
+	}
+	if !result.Projects[0].TagCreated {
+		t.Error("tag should be created")
+	}
+}
+
+// TestReleaseExecutor_Execute_NoAssetsConfigured_SkipsCommit verifies that
+// with no git.assets configured, the executor does not stage/commit/push at
+// all — it only tags at the pre-existing HEAD. This is the existing
+// (single-repo, no prepared files) behavior and must not regress.
+func TestReleaseExecutor_Execute_NoAssetsConfigured_SkipsCommit(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+
+	mockGit := mocks.NewMockGitRepository(ctrl)
+	mockTag := mocks.NewMockTagService(ctrl)
+	mockChangelog := mocks.NewMockChangelogGenerator(ctrl)
+	mockPublisher := mocks.NewMockReleasePublisher(ctrl)
+	mockLogger := mocks.NewMockLogger(ctrl)
+	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
+
+	sections := domain.DefaultChangelogSections()
+
+	mockChangelog.EXPECT().Generate(
+		domain.NewVersion(1, 1, 0), "", gomock.Any(), sections,
+	).Return("## 1.1.0", nil)
+
+	mockTag.EXPECT().FormatTag("", domain.NewVersion(1, 1, 0)).Return("v1.1.0", nil)
+
+	// No Stage/Commit/Push expectations set up at all — gomock fails the test
+	// if the executor calls them unexpectedly with an empty GitConfig.
+	mockGit.EXPECT().HeadHash(gomock.Any()).Return("deadbeef", nil)
+	mockGit.EXPECT().CreateTag(gomock.Any(), "v1.1.0", "deadbeef", gomock.Any()).Return(nil)
+	mockGit.EXPECT().PushTag(gomock.Any(), "v1.1.0").Return(nil)
+
+	mockPublisher.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(
+		domain.ProjectReleaseResult{Published: true}, nil,
+	)
+
+	executor := app.MustNewReleaseExecutor(mockGit, mockTag, mockChangelog, mockPublisher, mockLogger, sections, domain.GitConfig{})
+
+	plan := &domain.ReleasePlan{
+		DryRun: false,
+		Projects: []domain.ProjectReleasePlan{{
+			Project:        domain.Project{Name: "", Path: "."},
+			CurrentVersion: domain.NewVersion(1, 0, 0),
+			NextVersion:    domain.NewVersion(1, 1, 0),
+			ReleaseType:    domain.ReleaseMinor,
+			Commits:        []domain.Commit{{Type: "feat", Description: "add feature"}},
+			ShouldRelease:  true,
+		}},
+	}
+
+	if _, err := executor.Execute(context.Background(), plan); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+}
+
+// TestReleaseExecutor_Execute_PushBranchFailure_IsHardFailure verifies that a
+// failure to push the release commit aborts the release (matching the
+// documented error model: tag/push failures are hard failures) instead of
+// proceeding to tag a commit that was never pushed.
+func TestReleaseExecutor_Execute_PushBranchFailure_IsHardFailure(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+
+	mockGit := mocks.NewMockGitRepository(ctrl)
+	mockTag := mocks.NewMockTagService(ctrl)
+	mockChangelog := mocks.NewMockChangelogGenerator(ctrl)
+	mockPublisher := mocks.NewMockReleasePublisher(ctrl)
+	mockLogger := mocks.NewMockLogger(ctrl)
+	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
+
+	sections := domain.DefaultChangelogSections()
+
+	mockChangelog.EXPECT().Generate(
+		domain.NewVersion(1, 1, 0), "", gomock.Any(), sections,
+	).Return("## 1.1.0", nil)
+
+	mockTag.EXPECT().FormatTag("", domain.NewVersion(1, 1, 0)).Return("v1.1.0", nil)
+
+	assets := []string{"CHANGELOG.md"}
+
+	mockGit.EXPECT().Stage(gomock.Any(), assets).Return(nil)
+	mockGit.EXPECT().Commit(gomock.Any(), gomock.Any()).Return(nil)
+	mockGit.EXPECT().Push(gomock.Any()).Return(errors.New("remote rejected push"))
+	// HeadHash/CreateTag/PushTag must never be called once Push fails.
+
+	gitConfig := domain.GitConfig{Assets: assets}
+	executor := app.MustNewReleaseExecutor(mockGit, mockTag, mockChangelog, mockPublisher, mockLogger, sections, gitConfig)
+
+	plan := &domain.ReleasePlan{
+		DryRun: false,
+		Projects: []domain.ProjectReleasePlan{{
+			Project:        domain.Project{Name: "", Path: "."},
+			CurrentVersion: domain.NewVersion(1, 0, 0),
+			NextVersion:    domain.NewVersion(1, 1, 0),
+			ReleaseType:    domain.ReleaseMinor,
+			Commits:        []domain.Commit{{Type: "feat", Description: "add feature"}},
+			ShouldRelease:  true,
+		}},
+	}
+
+	_, err := executor.Execute(context.Background(), plan)
+	if err == nil {
+		t.Fatal("Execute() should return an error when pushing the release branch fails")
+	}
+}
+
 func TestReleaseExecutor_Execute_PublishFailure(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
@@ -166,7 +341,7 @@ func TestReleaseExecutor_Execute_PublishFailure(t *testing.T) {
 		domain.ProjectReleaseResult{}, errors.New("github api unavailable"),
 	)
 
-	executor := app.MustNewReleaseExecutor(mockGit, mockTag, mockChangelog, mockPublisher, mockLogger, sections)
+	executor := app.MustNewReleaseExecutor(mockGit, mockTag, mockChangelog, mockPublisher, mockLogger, sections, domain.GitConfig{})
 
 	plan := &domain.ReleasePlan{
 		DryRun: false,
@@ -237,7 +412,7 @@ func TestReleaseExecutor_Execute_TagAlreadyExists(t *testing.T) {
 		domain.ProjectReleaseResult{Published: true, PublishURL: "https://github.com/org/repo/releases/tag/api/v1.1.0"}, nil,
 	)
 
-	executor := app.MustNewReleaseExecutor(mockGit, mockTag, mockChangelog, mockPublisher, mockLogger, sections)
+	executor := app.MustNewReleaseExecutor(mockGit, mockTag, mockChangelog, mockPublisher, mockLogger, sections, domain.GitConfig{})
 
 	plan := &domain.ReleasePlan{
 		DryRun: false,
@@ -285,19 +460,19 @@ func TestMustNewReleaseExecutor_PanicsOnNilArgs(t *testing.T) {
 		fn   func()
 	}{
 		{"nil git", func() {
-			app.MustNewReleaseExecutor(nil, validTag, validChangelog, validPublisher, validLogger, nil)
+			app.MustNewReleaseExecutor(nil, validTag, validChangelog, validPublisher, validLogger, nil, domain.GitConfig{})
 		}},
 		{"nil tagService", func() {
-			app.MustNewReleaseExecutor(validGit, nil, validChangelog, validPublisher, validLogger, nil)
+			app.MustNewReleaseExecutor(validGit, nil, validChangelog, validPublisher, validLogger, nil, domain.GitConfig{})
 		}},
 		{"nil changelog", func() {
-			app.MustNewReleaseExecutor(validGit, validTag, nil, validPublisher, validLogger, nil)
+			app.MustNewReleaseExecutor(validGit, validTag, nil, validPublisher, validLogger, nil, domain.GitConfig{})
 		}},
 		{"nil publisher", func() {
-			app.MustNewReleaseExecutor(validGit, validTag, validChangelog, nil, validLogger, nil)
+			app.MustNewReleaseExecutor(validGit, validTag, validChangelog, nil, validLogger, nil, domain.GitConfig{})
 		}},
 		{"nil logger", func() {
-			app.MustNewReleaseExecutor(validGit, validTag, validChangelog, validPublisher, nil, nil)
+			app.MustNewReleaseExecutor(validGit, validTag, validChangelog, validPublisher, nil, nil, domain.GitConfig{})
 		}},
 	}
 
@@ -352,7 +527,7 @@ func TestReleaseExecutor_Execute_TagAlreadyExists_PushAlreadyOnRemote(t *testing
 		domain.ProjectReleaseResult{Published: true}, nil,
 	)
 
-	executor := app.MustNewReleaseExecutor(mockGit, mockTag, mockChangelog, mockPublisher, mockLogger, sections)
+	executor := app.MustNewReleaseExecutor(mockGit, mockTag, mockChangelog, mockPublisher, mockLogger, sections, domain.GitConfig{})
 
 	plan := &domain.ReleasePlan{
 		DryRun: false,
