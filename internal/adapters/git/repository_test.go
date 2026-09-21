@@ -468,6 +468,42 @@ func TestRepository_Commit_CreatesCommit(t *testing.T) {
 	}
 }
 
+// TestRepository_Commit_UsesConfiguredIdentity guards the fix for a real bug:
+// Commit previously ignored the configured git.author/git_committer entirely
+// and relied on the ambient git config, which is unset on a fresh CI runner
+// and fails with "empty ident name".
+func TestRepository_Commit_UsesConfiguredIdentity(t *testing.T) {
+	t.Parallel()
+	dir, repo := newTestGitRepo(t)
+	addTestCommit(t, dir, "initial.txt", "init", "chore: initial commit")
+
+	repo.SetIdentity(
+		domain.GitIdentity{Name: "release-author", Email: "author@example.com"},
+		domain.GitIdentity{Name: "release-committer", Email: "committer@example.com"},
+	)
+
+	if err := os.WriteFile(filepath.Join(dir, "release.txt"), []byte("v1.0.0"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.CommandContext(context.Background(), "git", "-C", dir, "add", "release.txt").CombinedOutput(); err != nil {
+		t.Fatalf("git add: %s: %v", out, err)
+	}
+
+	if err := repo.Commit(context.Background(), "chore(release): v1.0.0"); err != nil {
+		t.Fatalf("Commit: unexpected error: %v", err)
+	}
+
+	logOut, err := exec.CommandContext(context.Background(), "git", "-C", dir, "log", "-1", "--format=%an|%ae|%cn|%ce").Output()
+	if err != nil {
+		t.Fatalf("git log: %v", err)
+	}
+	got := strings.TrimSpace(string(logOut))
+	want := "release-author|author@example.com|release-committer|committer@example.com"
+	if got != want {
+		t.Errorf("author/committer = %q, want %q", got, want)
+	}
+}
+
 func TestRepository_Push_NoRemote(t *testing.T) {
 	t.Parallel()
 	dir, repo := newTestGitRepo(t)

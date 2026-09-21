@@ -27,17 +27,28 @@ var _ ports.GitRepository = (*Repository)(nil)
 
 // Repository implements ports.GitRepository using go-git (pure Go, no CLI dependency).
 type Repository struct {
-	repo    *git.Repository
-	workDir string
+	repo      *git.Repository
+	workDir   string
+	author    *domain.GitIdentity
+	committer *domain.GitIdentity
 }
 
-// NewRepository opens an existing git repository at the given path.
+// NewRepository opens an existing git repository at the given path. Commit
+// uses a hardcoded "semantic-release-bot" identity unless SetIdentity is
+// called.
 func NewRepository(workDir string) (*Repository, error) {
 	repo, err := git.PlainOpen(workDir)
 	if err != nil {
 		return nil, fmt.Errorf("opening git repository at %s: %w", workDir, err)
 	}
 	return &Repository{repo: repo, workDir: workDir}, nil
+}
+
+// SetIdentity configures the author/committer identity Commit uses, instead
+// of the hardcoded default bot identity.
+func (r *Repository) SetIdentity(author, committer domain.GitIdentity) {
+	r.author = &author
+	r.committer = &committer
 }
 
 // CurrentBranch returns the name of the checked-out branch.
@@ -258,11 +269,25 @@ func (r *Repository) Commit(_ context.Context, message string) error {
 	if err != nil {
 		return fmt.Errorf("getting worktree: %w", err)
 	}
+	now := time.Now()
+	author := domain.DefaultGitIdentity()
+	if r.author != nil {
+		author = *r.author
+	}
+	committer := author
+	if r.committer != nil {
+		committer = *r.committer
+	}
 	_, err = w.Commit(message, &git.CommitOptions{
 		Author: &object.Signature{
-			Name:  "semantic-release-bot",
-			Email: "semantic-release-bot@users.noreply.github.com",
-			When:  time.Now(),
+			Name:  author.Name,
+			Email: author.Email,
+			When:  now,
+		},
+		Committer: &object.Signature{
+			Name:  committer.Name,
+			Email: committer.Email,
+			When:  now,
 		},
 	})
 	if err != nil {

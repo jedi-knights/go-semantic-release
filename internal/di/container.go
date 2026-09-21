@@ -94,12 +94,17 @@ func (c *Container) GitRepository() ports.GitRepository {
 			repo, err := adaptergogit.NewRepository(c.workDir)
 			if err != nil {
 				c.Logger().Warn("failed to open go-git repository, falling back to CLI", "error", err)
-				c.gitRepo = adaptergit.NewRepository(c.workDir)
+				cliRepo := adaptergit.NewRepository(c.workDir)
+				cliRepo.SetIdentity(c.config.GitAuthor, c.config.GitCommitter)
+				c.gitRepo = cliRepo
 			} else {
+				repo.SetIdentity(c.config.GitAuthor, c.config.GitCommitter)
 				c.gitRepo = repo
 			}
 		} else {
-			c.gitRepo = adaptergit.NewRepository(c.workDir)
+			cliRepo := adaptergit.NewRepository(c.workDir)
+			cliRepo.SetIdentity(c.config.GitAuthor, c.config.GitCommitter)
+			c.gitRepo = cliRepo
 		}
 	}
 	return c.gitRepo
