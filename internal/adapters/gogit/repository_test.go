@@ -341,6 +341,41 @@ func TestGoGit_CreateTag_Annotated(t *testing.T) {
 	}
 }
 
+// TestGoGit_CreateTag_Annotated_UsesConfiguredIdentity guards a second
+// occurrence of the same bug TestGoGit_Commit_UsesConfiguredIdentity covers:
+// CreateTag hardcoded the tagger identity independently of Commit's, so
+// fixing Commit alone left this call site still wrong.
+func TestGoGit_CreateTag_Annotated_UsesConfiguredIdentity(t *testing.T) {
+	t.Parallel()
+	repo, dir := newTestRepo(t)
+	h := addCommit(t, repo, dir, "i.txt", "initial commit")
+
+	r, err := gogit.NewRepository(dir)
+	if err != nil {
+		t.Fatalf("NewRepository: %v", err)
+	}
+	r.SetIdentity(
+		domain.GitIdentity{Name: "release-author", Email: "author@example.com"},
+		domain.GitIdentity{Name: "release-tagger", Email: "tagger@example.com"},
+	)
+
+	if tagErr := r.CreateTag(context.Background(), "v1.0.0", h.String(), "Release v1.0.0"); tagErr != nil {
+		t.Fatalf("CreateTag (annotated): %v", tagErr)
+	}
+
+	tagRef, err := repo.Tag("v1.0.0")
+	if err != nil {
+		t.Fatalf("Tag: %v", err)
+	}
+	tagObj, err := repo.TagObject(tagRef.Hash())
+	if err != nil {
+		t.Fatalf("TagObject: %v", err)
+	}
+	if tagObj.Tagger.Name != "release-tagger" || tagObj.Tagger.Email != "tagger@example.com" {
+		t.Errorf("tagger = %q <%s>, want %q <%s>", tagObj.Tagger.Name, tagObj.Tagger.Email, "release-tagger", "tagger@example.com")
+	}
+}
+
 func TestGoGit_CreateTag_AlreadyExists_SameCommit(t *testing.T) {
 	t.Parallel()
 	repo, dir := newTestRepo(t)

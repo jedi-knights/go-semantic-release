@@ -367,6 +367,36 @@ func TestRepository_CreateTag_Annotated(t *testing.T) {
 	}
 }
 
+// TestRepository_CreateTag_Annotated_UsesConfiguredIdentity guards a second
+// occurrence of the same bug TestRepository_Commit_UsesConfiguredIdentity
+// covers: annotated tags carry a "tagger" field with the same identity
+// requirement as a commit, and CreateTag has its own call to git that must
+// receive the identity env vars independently of Commit's.
+func TestRepository_CreateTag_Annotated_UsesConfiguredIdentity(t *testing.T) {
+	t.Parallel()
+	dir, repo := newTestGitRepo(t)
+	hash := addTestCommit(t, dir, "README", "hello", "chore: initial commit")
+
+	repo.SetIdentity(
+		domain.GitIdentity{Name: "release-author", Email: "author@example.com"},
+		domain.GitIdentity{Name: "release-tagger", Email: "tagger@example.com"},
+	)
+
+	if err := repo.CreateTag(context.Background(), "v1.0.0", hash, "Release v1.0.0"); err != nil {
+		t.Fatalf("CreateTag (annotated): unexpected error: %v", err)
+	}
+
+	out, err := exec.CommandContext(context.Background(), "git", "-C", dir, "for-each-ref", "--format=%(taggername)|%(taggeremail)", "refs/tags/v1.0.0").Output()
+	if err != nil {
+		t.Fatalf("git for-each-ref: %v", err)
+	}
+	got := strings.TrimSpace(string(out))
+	want := "release-tagger|<tagger@example.com>"
+	if got != want {
+		t.Errorf("tagger = %q, want %q", got, want)
+	}
+}
+
 func TestRepository_CreateTag_Duplicate_SameHash(t *testing.T) {
 	t.Parallel()
 	dir, repo := newTestGitRepo(t)

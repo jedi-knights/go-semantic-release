@@ -180,7 +180,9 @@ func (r *Repository) FilesChangedInCommit(ctx context.Context, hash string) ([]s
 func (r *Repository) CreateTag(ctx context.Context, name, hash, message string) error {
 	var err error
 	if message != "" {
-		_, err = r.run(ctx, "tag", "-a", name, hash, "-m", message)
+		// Annotated tags carry a "tagger" field and fail with the same
+		// "empty ident name" error as a commit without an identity.
+		_, err = r.runWithEnv(ctx, r.identityEnv(), "tag", "-a", name, hash, "-m", message)
 	} else {
 		_, err = r.run(ctx, "tag", name, hash)
 	}
@@ -221,7 +223,11 @@ func (r *Repository) Stage(ctx context.Context, files []string) error {
 	return err
 }
 
-func (r *Repository) Commit(ctx context.Context, message string) error {
+// identityEnv builds GIT_AUTHOR_*/GIT_COMMITTER_* env vars from the
+// configured identity, for any git subcommand that requires one (commit,
+// and annotated tag creation — both fail with "empty ident name" without
+// it on a runner with no ambient git config).
+func (r *Repository) identityEnv() []string {
 	var env []string
 	if r.author != nil {
 		env = append(env, "GIT_AUTHOR_NAME="+r.author.Name, "GIT_AUTHOR_EMAIL="+r.author.Email)
@@ -229,7 +235,11 @@ func (r *Repository) Commit(ctx context.Context, message string) error {
 	if r.committer != nil {
 		env = append(env, "GIT_COMMITTER_NAME="+r.committer.Name, "GIT_COMMITTER_EMAIL="+r.committer.Email)
 	}
-	_, err := r.runWithEnv(ctx, env, "commit", "-m", message)
+	return env
+}
+
+func (r *Repository) Commit(ctx context.Context, message string) error {
+	_, err := r.runWithEnv(ctx, r.identityEnv(), "commit", "-m", message)
 	return err
 }
 

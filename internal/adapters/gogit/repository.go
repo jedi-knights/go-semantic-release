@@ -165,11 +165,12 @@ func (r *Repository) CreateTag(_ context.Context, name, hash, message string) er
 
 	if message != "" {
 		// Create annotated tag.
+		_, tagger := r.resolvedIdentity()
 		_, err := r.repo.CreateTag(name, commitHash, &git.CreateTagOptions{
 			Message: message,
 			Tagger: &object.Signature{
-				Name:  "semantic-release-bot",
-				Email: "semantic-release-bot@users.noreply.github.com",
+				Name:  tagger.Name,
+				Email: tagger.Email,
 				When:  time.Now(),
 			},
 		})
@@ -264,20 +265,27 @@ func (r *Repository) Stage(_ context.Context, files []string) error {
 }
 
 // Commit creates a commit with the given message from the current index.
+// resolvedIdentity returns the configured author/committer, falling back to
+// the default bot identity for whichever is unset.
+func (r *Repository) resolvedIdentity() (author, committer domain.GitIdentity) {
+	author = domain.DefaultGitIdentity()
+	if r.author != nil {
+		author = *r.author
+	}
+	committer = author
+	if r.committer != nil {
+		committer = *r.committer
+	}
+	return author, committer
+}
+
 func (r *Repository) Commit(_ context.Context, message string) error {
 	w, err := r.repo.Worktree()
 	if err != nil {
 		return fmt.Errorf("getting worktree: %w", err)
 	}
 	now := time.Now()
-	author := domain.DefaultGitIdentity()
-	if r.author != nil {
-		author = *r.author
-	}
-	committer := author
-	if r.committer != nil {
-		committer = *r.committer
-	}
+	author, committer := r.resolvedIdentity()
 	_, err = w.Commit(message, &git.CommitOptions{
 		Author: &object.Signature{
 			Name:  author.Name,
