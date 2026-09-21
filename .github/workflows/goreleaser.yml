@@ -1,14 +1,12 @@
 name: GoReleaser
 
 on:
-  push:
-    tags:
-      # Match only full semver tags (e.g. v1.2.3). Floating major-version tags
-      # like v0 or v1 also match 'v*' and would trigger a duplicate release run.
-      - 'v*.*.*'
-  # Manual re-run for a tag whose push-triggered run never fired (e.g. the tag
-  # was pushed with a token/PAT lacking permission to trigger workflows).
-  # Dispatch with the tag as the ref: `gh workflow run goreleaser.yml --ref vX.Y.Z`.
+  # release.yml now builds and publishes binaries inline (same job/run) right
+  # after tagging, instead of relying on this push:tags trigger — that
+  # cross-workflow trigger proved unreliable (see PR #30/#31 history). This
+  # workflow stays as a manual escape hatch only, for re-running the build
+  # against an already-tagged release if it ever needs a rebuild:
+  # `gh workflow run goreleaser.yml --ref vX.Y.Z`.
   workflow_dispatch: {}
 
 permissions:
