@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.2 (2026-09-21)
+
+### Bug Fixes
+
+- **git:** apply configured git.author/git_committer to Commit (#33) (4484242)
+
 ## 0.11.1 (2026-09-21)
 
 ### Bug Fixes
