@@ -432,6 +432,7 @@ func (c *Container) ReleaseExecutor() *app.ReleaseExecutor {
 		c.ReleasePublisher(),
 		c.Logger(),
 		c.config.ChangelogSections,
+		c.config.Git,
 	)
 }
 
