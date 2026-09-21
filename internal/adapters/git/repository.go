@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -17,17 +18,36 @@ var _ ports.GitRepository = (*Repository)(nil)
 
 // Repository implements ports.GitRepository using the git CLI.
 type Repository struct {
-	workDir string
+	workDir   string
+	author    *domain.GitIdentity
+	committer *domain.GitIdentity
 }
 
-// NewRepository creates a new git CLI adapter.
+// NewRepository creates a new git CLI adapter. Commit uses the ambient git
+// config (user.name/user.email) for the author/committer identity unless
+// SetIdentity is called.
 func NewRepository(workDir string) *Repository {
 	return &Repository{workDir: workDir}
 }
 
+// SetIdentity configures the author/committer identity Commit uses, instead
+// of relying on the ambient git config (which may be unset, e.g. on a fresh
+// CI runner — see the "empty ident name" failure this fixes).
+func (r *Repository) SetIdentity(author, committer domain.GitIdentity) {
+	r.author = &author
+	r.committer = &committer
+}
+
 func (r *Repository) run(ctx context.Context, args ...string) (string, error) {
+	return r.runWithEnv(ctx, nil, args...)
+}
+
+func (r *Repository) runWithEnv(ctx context.Context, extraEnv []string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = r.workDir
+	if len(extraEnv) > 0 {
+		cmd.Env = append(os.Environ(), extraEnv...)
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -202,7 +222,14 @@ func (r *Repository) Stage(ctx context.Context, files []string) error {
 }
 
 func (r *Repository) Commit(ctx context.Context, message string) error {
-	_, err := r.run(ctx, "commit", "-m", message)
+	var env []string
+	if r.author != nil {
+		env = append(env, "GIT_AUTHOR_NAME="+r.author.Name, "GIT_AUTHOR_EMAIL="+r.author.Email)
+	}
+	if r.committer != nil {
+		env = append(env, "GIT_COMMITTER_NAME="+r.committer.Name, "GIT_COMMITTER_EMAIL="+r.committer.Email)
+	}
+	_, err := r.runWithEnv(ctx, env, "commit", "-m", message)
 	return err
 }
 

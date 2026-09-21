@@ -601,6 +601,45 @@ func TestGoGit_Commit_CreatesCommit(t *testing.T) {
 	}
 }
 
+// TestGoGit_Commit_UsesConfiguredIdentity guards the fix for a real bug:
+// Commit previously ignored the configured git.author/git_committer entirely
+// and always used the hardcoded bot identity, regardless of config.
+func TestGoGit_Commit_UsesConfiguredIdentity(t *testing.T) {
+	t.Parallel()
+	repo, dir := newTestRepo(t)
+	addCommit(t, repo, dir, "base.txt", "initial commit")
+
+	if err := os.WriteFile(filepath.Join(dir, "commit-me.txt"), []byte("data"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	r, err := gogit.NewRepository(dir)
+	if err != nil {
+		t.Fatalf("NewRepository: %v", err)
+	}
+	r.SetIdentity(
+		domain.GitIdentity{Name: "release-author", Email: "author@example.com"},
+		domain.GitIdentity{Name: "release-committer", Email: "committer@example.com"},
+	)
+
+	if err := r.Stage(context.Background(), []string{"commit-me.txt"}); err != nil {
+		t.Fatalf("Stage: %v", err)
+	}
+	if err := r.Commit(context.Background(), "chore(release): 1.0.0"); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+
+	out, runErr := runGit(t, dir, "log", "-1", "--format=%an|%ae|%cn|%ce")
+	if runErr != nil {
+		t.Fatalf("git log: %v\n%s", runErr, out)
+	}
+	got := string(bytes.TrimSpace(out))
+	want := "release-author|author@example.com|release-committer|committer@example.com"
+	if got != want {
+		t.Errorf("author/committer = %q, want %q", got, want)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Push
 // ---------------------------------------------------------------------------
